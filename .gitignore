@@ -1,0 +1,18 @@
+# Sanal ortam
+venv/
+
+# Veritabanı (kişisel veri içerebilir)
+data/stok.db
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
