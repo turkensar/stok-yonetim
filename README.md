@@ -115,16 +115,16 @@ Uygulama ilk açıldığında veritabanı otomatik oluşturulur. Hızlıca test 
 ## Ekran Görüntüleri
 
 ### Dashboard — KPI ve Analiz Özeti
-> Toplam stok değeri, kritik stok oranı, akıllı analiz yorumları ve son hareketler.
+![Dashboard](screenshots/ss_dashboard.png)
 
 ### Ürün Yönetimi — Liste Görünümü
-> Ürünler kritik/normal durum etiketiyle, Türkçe para formatında.
+![Ürün Listesi](screenshots/ss_urunler.png)
 
 ### Kritik Stok — Eksik Adet ve Maliyet
-> Her kritik ürün için eksik miktar ve tahmini tedarik maliyeti.
+![Kritik Stok](screenshots/ss_kritik.png)
 
 ### Stok Hareketleri — Geçmiş Filtresi
-> Ürün, tür, tarih aralığı ve kayıt sayısı bazlı filtreleme.
+![Stok Hareketleri](screenshots/ss_hareketler.png)
 
 ---
 
