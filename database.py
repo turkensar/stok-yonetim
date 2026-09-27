@@ -13,7 +13,7 @@ from models import Kategori, Urun, StokHareketi
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "stok.db")
 
 # Şema her değiştiğinde artırılır; init_db eksik migration'ları sırayla uygular.
-SEMA_SURUMU = 1
+SEMA_SURUMU = 2
 
 
 class YetersizStokHatasi(Exception):
@@ -149,7 +149,15 @@ def _migration_1(conn: sqlite3.Connection) -> None:
     )
 
 
-_MIGRATIONLAR = {1: _migration_1}
+def _migration_2(conn: sqlite3.Connection) -> None:
+    """Ürünler silinmek yerine pasife alınır; hareket geçmişi korunur."""
+    conn.execute(
+        "ALTER TABLE urunler ADD COLUMN "
+        "aktif INTEGER NOT NULL DEFAULT 1 CHECK (aktif IN (0, 1))"
+    )
+
+
+_MIGRATIONLAR = {1: _migration_1, 2: _migration_2}
 
 
 def init_db() -> None:
@@ -210,6 +218,11 @@ def kategori_getir(kategori_id: int) -> Optional[dict]:
 
 def kategori_sil(kategori_id: int) -> None:
     with get_connection() as conn:
+        # Pasif (silinmiş) ürünlerin kategori bağı koparılır; geçmişleri kalır.
+        conn.execute(
+            "UPDATE urunler SET kategori_id = NULL WHERE kategori_id = ? AND aktif = 0",
+            (kategori_id,),
+        )
         conn.execute("DELETE FROM kategoriler WHERE id = ?", (kategori_id,))
 
 
@@ -234,7 +247,7 @@ def urunleri_getir(kategori_id: Optional[int] = None) -> list[dict]:
                 """SELECT u.*, k.ad AS kategori_adi
                    FROM urunler u
                    LEFT JOIN kategoriler k ON u.kategori_id = k.id
-                   WHERE u.kategori_id = ?
+                   WHERE u.aktif = 1 AND u.kategori_id = ?
                    ORDER BY u.ad""",
                 (kategori_id,),
             ).fetchall()
@@ -243,6 +256,7 @@ def urunleri_getir(kategori_id: Optional[int] = None) -> list[dict]:
                 """SELECT u.*, k.ad AS kategori_adi
                    FROM urunler u
                    LEFT JOIN kategoriler k ON u.kategori_id = k.id
+                   WHERE u.aktif = 1
                    ORDER BY u.ad"""
             ).fetchall()
     return [dict(r) for r in rows]
@@ -254,31 +268,32 @@ def urun_getir(urun_id: int) -> Optional[dict]:
             """SELECT u.*, k.ad AS kategori_adi
                FROM urunler u
                LEFT JOIN kategoriler k ON u.kategori_id = k.id
-               WHERE u.id = ?""",
+               WHERE u.id = ? AND u.aktif = 1""",
             (urun_id,),
         ).fetchone()
     return dict(row) if row else None
 
 
 def urun_guncelle(u: Urun) -> None:
+    """Ürün bilgilerini günceller. Stok burada değişmez; yalnızca hareketlerle değişir."""
     with get_connection() as conn:
         conn.execute(
             """UPDATE urunler
-               SET ad=?, kategori_id=?, fiyat=?, stok_miktari=?, kritik_esik=?
-               WHERE id=?""",
-            (u.ad, u.kategori_id, u.fiyat, u.stok_miktari, u.kritik_esik, u.id),
+               SET ad=?, kategori_id=?, fiyat=?, kritik_esik=?
+               WHERE id=? AND aktif=1""",
+            (u.ad, u.kategori_id, u.fiyat, u.kritik_esik, u.id),
         )
 
 
 def urun_sil(urun_id: int) -> None:
+    """Ürünü pasife alır (soft delete); stok hareketleri denetim için saklanır."""
     with get_connection() as conn:
-        conn.execute("DELETE FROM stok_hareketleri WHERE urun_id = ?", (urun_id,))
-        conn.execute("DELETE FROM urunler WHERE id = ?", (urun_id,))
+        conn.execute("UPDATE urunler SET aktif = 0 WHERE id = ?", (urun_id,))
 
 
 def urun_sayisi(conn: Optional[sqlite3.Connection] = None) -> int:
     with _baglanti(conn) as conn:
-        return conn.execute("SELECT COUNT(*) FROM urunler").fetchone()[0]
+        return conn.execute("SELECT COUNT(*) FROM urunler WHERE aktif = 1").fetchone()[0]
 
 
 def urun_hareket_sayisi(urun_id: int) -> int:
@@ -312,12 +327,12 @@ def stok_hareketi_uygula(
     with (_baglanti(conn) if conn is not None else transaction()) as conn:
         cur = conn.execute(
             """UPDATE urunler SET stok_miktari = stok_miktari + ?
-               WHERE id = ? AND stok_miktari + ? >= 0""",
+               WHERE id = ? AND aktif = 1 AND stok_miktari + ? >= 0""",
             (delta, urun_id, delta),
         )
         if cur.rowcount == 0:
             row = conn.execute(
-                "SELECT stok_miktari FROM urunler WHERE id = ?", (urun_id,)
+                "SELECT stok_miktari FROM urunler WHERE id = ? AND aktif = 1", (urun_id,)
             ).fetchone()
             if row is None:
                 raise LookupError("Ürün bulunamadı.")
@@ -344,6 +359,10 @@ def stok_hareketi_uygula(
     return {"yeni_stok": urun["stok_miktari"], "kritik_esik": urun["kritik_esik"]}
 
 
+# Silinmiş ürünlerin hareketleri geçmişte görünmeye devam eder, adları işaretlenir.
+_URUN_ADI_SQL = "CASE WHEN u.aktif = 1 THEN u.ad ELSE u.ad || ' (silindi)' END"
+
+
 def hareketleri_getir(
     urun_id: Optional[int] = None,
     baslangic: Optional[str] = None,
@@ -351,8 +370,8 @@ def hareketleri_getir(
     tur: Optional[str] = None,
     limit: Optional[int] = None,
 ) -> list[dict]:
-    query = """
-        SELECT sh.*, u.ad AS urun_adi
+    query = f"""
+        SELECT sh.*, {_URUN_ADI_SQL} AS urun_adi
         FROM stok_hareketleri sh
         JOIN urunler u ON sh.urun_id = u.id
         WHERE 1=1
@@ -382,7 +401,7 @@ def hareketleri_getir(
 def son_hareketleri_getir(n: int = 10) -> list[dict]:
     with get_connection() as conn:
         rows = conn.execute(
-            """SELECT sh.*, u.ad AS urun_adi
+            f"""SELECT sh.*, {_URUN_ADI_SQL} AS urun_adi
                FROM stok_hareketleri sh
                JOIN urunler u ON sh.urun_id = u.id
                ORDER BY sh.tarih DESC LIMIT ?""",
@@ -395,17 +414,21 @@ def son_hareketleri_getir(n: int = 10) -> list[dict]:
 # Dashboard Sorguları
 # ─────────────────────────────────────────────────────────────────────────────
 
-def urun_adi_var_mi(ad: str, exclude_id: Optional[int] = None) -> bool:
-    """Aynı isimde başka bir ürün var mı kontrol eder."""
-    with get_connection() as conn:
+def urun_adi_var_mi(
+    ad: str,
+    exclude_id: Optional[int] = None,
+    conn: Optional[sqlite3.Connection] = None,
+) -> bool:
+    """Aynı isimde başka bir (aktif) ürün var mı kontrol eder."""
+    with _baglanti(conn) as conn:
         if exclude_id:
             row = conn.execute(
-                "SELECT id FROM urunler WHERE LOWER(ad) = LOWER(?) AND id != ?",
+                "SELECT id FROM urunler WHERE aktif = 1 AND LOWER(ad) = LOWER(?) AND id != ?",
                 (ad, exclude_id),
             ).fetchone()
         else:
             row = conn.execute(
-                "SELECT id FROM urunler WHERE LOWER(ad) = LOWER(?)", (ad,)
+                "SELECT id FROM urunler WHERE aktif = 1 AND LOWER(ad) = LOWER(?)", (ad,)
             ).fetchone()
     return row is not None
 
@@ -416,7 +439,7 @@ def kategorileri_urun_sayisiyla_getir() -> list[dict]:
         rows = conn.execute(
             """SELECT k.*, COUNT(u.id) AS urun_sayisi
                FROM kategoriler k
-               LEFT JOIN urunler u ON u.kategori_id = k.id
+               LEFT JOIN urunler u ON u.kategori_id = k.id AND u.aktif = 1
                GROUP BY k.id
                ORDER BY k.ad"""
         ).fetchall()
@@ -430,6 +453,7 @@ def en_yuksek_degerli_urun() -> Optional[dict]:
             """SELECT ad, fiyat, stok_miktari,
                       (fiyat * stok_miktari) AS toplam_deger
                FROM urunler
+               WHERE aktif = 1
                ORDER BY toplam_deger DESC LIMIT 1"""
         ).fetchone()
     return dict(row) if row else None
@@ -443,7 +467,7 @@ def kategori_dagilimi() -> list[dict]:
                       COUNT(u.id) AS urun_sayisi,
                       COALESCE(SUM(u.fiyat * u.stok_miktari), 0) AS toplam_deger
                FROM kategoriler k
-               LEFT JOIN urunler u ON u.kategori_id = k.id
+               LEFT JOIN urunler u ON u.kategori_id = k.id AND u.aktif = 1
                GROUP BY k.id
                ORDER BY toplam_deger DESC"""
         ).fetchall()
@@ -452,13 +476,17 @@ def kategori_dagilimi() -> list[dict]:
 
 def dashboard_verisi_getir() -> dict:
     with get_connection() as conn:
-        toplam_urun = conn.execute("SELECT COUNT(*) FROM urunler").fetchone()[0]
-        toplam_stok = conn.execute("SELECT SUM(stok_miktari) FROM urunler").fetchone()[0] or 0
+        toplam_urun = conn.execute(
+            "SELECT COUNT(*) FROM urunler WHERE aktif = 1"
+        ).fetchone()[0]
+        toplam_stok = conn.execute(
+            "SELECT SUM(stok_miktari) FROM urunler WHERE aktif = 1"
+        ).fetchone()[0] or 0
         toplam_deger = conn.execute(
-            "SELECT SUM(fiyat * stok_miktari) FROM urunler"
+            "SELECT SUM(fiyat * stok_miktari) FROM urunler WHERE aktif = 1"
         ).fetchone()[0] or 0.0
         kritik_sayi = conn.execute(
-            "SELECT COUNT(*) FROM urunler WHERE stok_miktari <= kritik_esik"
+            "SELECT COUNT(*) FROM urunler WHERE aktif = 1 AND stok_miktari <= kritik_esik"
         ).fetchone()[0]
 
         # Kritik stok oranı için toplam ürün sayısı zaten var
@@ -469,7 +497,7 @@ def dashboard_verisi_getir() -> dict:
             """SELECT u.ad, COUNT(sh.id) AS hareket_sayisi
                FROM stok_hareketleri sh
                JOIN urunler u ON sh.urun_id = u.id
-               WHERE sh.tarih >= date('now', '-30 days')
+               WHERE u.aktif = 1 AND sh.tarih >= date('now', '-30 days')
                GROUP BY sh.urun_id
                ORDER BY hareket_sayisi DESC LIMIT 1"""
         ).fetchone()
@@ -484,7 +512,7 @@ def dashboard_verisi_getir() -> dict:
 
         # Stoku tamamen biten ürün sayısı
         stok_biten = conn.execute(
-            "SELECT COUNT(*) FROM urunler WHERE stok_miktari = 0"
+            "SELECT COUNT(*) FROM urunler WHERE aktif = 1 AND stok_miktari = 0"
         ).fetchone()[0]
 
     son7_dict = {r["tur"]: r["sayi"] for r in son7}

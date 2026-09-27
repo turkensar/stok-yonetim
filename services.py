@@ -58,8 +58,10 @@ class StokServisi:
         kritik_esik: int,
         kategori_id: Optional[int] = None,
     ) -> Sonuc:
-        if db.urun_adi_var_mi(ad):
-            return False, f"'{ad}' adında bir ürün zaten mevcut."
+        """
+        Ürünü ekler. Başlangıç stoğu doğrudan yazılmaz; aynı transaction içinde
+        "Başlangıç stoku" açıklamalı bir giriş hareketi olarak kaydedilir.
+        """
         try:
             u = Urun(
                 ad=ad,
@@ -68,37 +70,52 @@ class StokServisi:
                 kritik_esik=kritik_esik,
                 kategori_id=kategori_id,
             )
-            db.urun_ekle(u)
-            return True, f"'{ad}' ürünü başarıyla eklendi."
         except ValueError as e:
             return False, str(e)
+        try:
+            with db.transaction() as conn:
+                if db.urun_adi_var_mi(u.ad, conn=conn):
+                    return False, f"'{u.ad}' adında bir ürün zaten mevcut."
+                baslangic_stok, u.stok_miktari = u.stok_miktari, 0
+                urun_id = db.urun_ekle(u, conn)
+                if baslangic_stok > 0:
+                    db.stok_hareketi_uygula(
+                        urun_id, "giriş", baslangic_stok, "Başlangıç stoku", conn=conn
+                    )
         except Exception as e:
             return False, f"Ürün eklenemedi: {e}"
+        return True, f"'{u.ad}' ürünü başarıyla eklendi."
 
     def urun_guncelle(
         self,
         urun_id: int,
         ad: str,
         fiyat: float,
-        stok_miktari: int,
         kritik_esik: int,
         kategori_id: Optional[int] = None,
     ) -> Sonuc:
+        """Ürün bilgilerini günceller. Stok yalnızca giriş/çıkış hareketleriyle değişir."""
+        mevcut = db.urun_getir(urun_id)
+        if not mevcut:
+            return False, "Ürün bulunamadı."
         try:
             u = Urun(
                 id=urun_id,
                 ad=ad,
                 fiyat=fiyat,
-                stok_miktari=stok_miktari,
+                stok_miktari=mevcut["stok_miktari"],
                 kritik_esik=kritik_esik,
                 kategori_id=kategori_id,
             )
-            db.urun_guncelle(u)
-            return True, f"'{ad}' ürünü güncellendi."
         except ValueError as e:
             return False, str(e)
+        if db.urun_adi_var_mi(u.ad, exclude_id=urun_id):
+            return False, f"'{u.ad}' adında başka bir ürün zaten mevcut."
+        try:
+            db.urun_guncelle(u)
         except Exception as e:
             return False, f"Ürün güncellenemedi: {e}"
+        return True, f"'{u.ad}' ürünü güncellendi."
 
     def urun_sil(self, urun_id: int) -> Sonuc:
         urun = db.urun_getir(urun_id)
@@ -109,7 +126,7 @@ class StokServisi:
             db.urun_sil(urun_id)
             mesaj = f"'{urun['ad']}' silindi."
             if hareket_sayisi > 0:
-                mesaj += f" ({hareket_sayisi} hareket kaydı da silindi.)"
+                mesaj += f" ({hareket_sayisi} hareket kaydı geçmişte korunuyor.)"
             return True, mesaj
         except Exception as e:
             return False, f"Ürün silinemedi: {e}"

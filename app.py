@@ -307,8 +307,9 @@ elif sayfa == "📦 Ürünler":
                     c1, c2 = st.columns(2)
                     fiyat        = c1.number_input("Fiyat (₺)", value=float(urun["fiyat"]),
                                                    min_value=0.0, step=0.01, format="%.2f")
-                    stok_miktari = c2.number_input("Stok", value=int(urun["stok_miktari"]),
-                                                   min_value=0, step=1)
+                    c2.text_input("Stok", value=f"{sayi_formatla(urun['stok_miktari'])} adet",
+                                  disabled=True,
+                                  help="Stok yalnızca Hareketler sayfasından giriş/çıkış ile değişir.")
                     c3, c4 = st.columns(2)
                     kritik_esik = c3.number_input("Kritik Eşik", value=int(urun["kritik_esik"]),
                                                   min_value=0, step=1)
@@ -322,24 +323,22 @@ elif sayfa == "📦 Ürünler":
                     sil_btn  = col_s.form_submit_button("🗑️ Sil",      use_container_width=True)
 
                     if guncelle:
-                        # Aynı isimli başka ürün var mı kontrol et
-                        if db.urun_adi_var_mi(ad, exclude_id=secili_id):
-                            st.error(f"'{ad}' adında başka bir ürün zaten mevcut.")
-                        else:
-                            basari, mesaj = servis.urun_guncelle(
-                                secili_id, ad, float(fiyat), int(stok_miktari),
-                                int(kritik_esik), int(kat_secim),
-                            )
-                            _bildir(basari, mesaj)
-                            if basari:
-                                st.rerun()
+                        basari, mesaj = servis.urun_guncelle(
+                            secili_id, ad, float(fiyat), int(kritik_esik), int(kat_secim),
+                        )
+                        _bildir(basari, mesaj)
+                        if basari:
+                            st.rerun()
 
                     if sil_btn:
                         st.session_state["sil_onayi_id"] = secili_id
 
             # Onay adımı — formun dışında
             if st.session_state.get("sil_onayi_id") == secili_id:
-                st.warning(f"**'{urun['ad']}'** silinecek. Bu işlem geri alınamaz!")
+                st.warning(
+                    f"**'{urun['ad']}'** silinecek. Ürün listelerden kalkar; "
+                    f"stok hareketleri geçmişte korunur."
+                )
                 col_evet, col_vazgec = st.columns(2)
                 if col_evet.button("✅ Evet, Sil", type="primary", use_container_width=True):
                     basari, mesaj = servis.urun_sil(secili_id)
