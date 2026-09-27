@@ -10,7 +10,7 @@ from typing import Optional
 import pandas as pd
 
 import database as db
-from models import Kategori, Urun
+from models import Kategori, Urun, kurusa_cevir
 
 # Dönüş tipi: (başarılı mı, mesaj)
 Sonuc = tuple[bool, str]
@@ -184,9 +184,22 @@ class StokServisi:
     # ── Raporlama ─────────────────────────────────────────────────────────────
 
     def kritik_stok_kontrol(self) -> list[dict]:
-        """Stok miktarı kritik eşiğin altındaki ürünleri döner."""
-        urunler = db.urunleri_getir()
-        return [u for u in urunler if u["stok_miktari"] <= u["kritik_esik"]]
+        """
+        Stoğu kritik eşiğinde veya altında olan ürünleri döner. Her ürüne,
+        kritik seviyeden çıkması (stok > eşik) için gereken adet ve bunun
+        tahmini maliyeti eklenir.
+        """
+        kritik = []
+        for u in db.urunleri_getir():
+            if u["stok_miktari"] > u["kritik_esik"]:
+                continue
+            gereken = u["kritik_esik"] - u["stok_miktari"] + 1
+            kritik.append({
+                **u,
+                "gereken_adet": gereken,
+                "tedarik_maliyeti": kurusa_cevir(u["fiyat"]) * gereken / 100,
+            })
+        return kritik
 
     def hareket_gecmisi(
         self,
@@ -249,8 +262,14 @@ class StokServisi:
         kritik = self.kritik_stok_kontrol()
         if not kritik:
             return ""
-        df = pd.DataFrame(kritik)[["ad", "kategori_adi", "stok_miktari", "kritik_esik", "fiyat"]]
-        df.columns = ["Ürün Adı", "Kategori", "Mevcut Stok", "Kritik Eşik", "Birim Fiyat (₺)"]
+        df = pd.DataFrame(kritik)[[
+            "ad", "kategori_adi", "stok_miktari", "kritik_esik", "gereken_adet",
+            "fiyat", "tedarik_maliyeti",
+        ]]
+        df.columns = [
+            "Ürün Adı", "Kategori", "Mevcut Stok", "Kritik Eşik", "Gereken Adet",
+            "Birim Fiyat (₺)", "Tedarik Maliyeti (₺)",
+        ]
         return self._df_to_csv(df)
 
     def tum_urunler_csv_aktar(self) -> str:

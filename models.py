@@ -65,7 +65,7 @@ class Urun:
 
     @property
     def kritik_mi(self) -> bool:
-        """Stok miktarı kritik eşiğin altındaysa True döner."""
+        """Stok miktarı kritik eşiğinde veya altındaysa True döner."""
         return self.stok_miktari <= self.kritik_esik
 
     @property

@@ -459,27 +459,22 @@ elif sayfa == "⚠️ Kritik Stok":
         st.success("✅ Şu an kritik stok seviyesinde ürün yok.")
     else:
         # Özet
-        toplam_eksik_adet = sum(
-            max(0, u["kritik_esik"] - u["stok_miktari"]) for u in kritik
-        )
-        toplam_eksik_maliyet = sum(
-            max(0, u["kritik_esik"] - u["stok_miktari"]) * u["fiyat"] for u in kritik
-        )
+        toplam_gereken = sum(u["gereken_adet"] for u in kritik)
+        toplam_maliyet = sum(u["tedarik_maliyeti"] for u in kritik)
         c1, c2, c3 = st.columns(3)
         c1.metric("Kritik Ürün Sayısı", len(kritik))
-        c2.metric("Toplam Eksik Adet",  sayi_formatla(toplam_eksik_adet))
-        c3.metric("Min. Tedarik Maliyeti", para_formatla(toplam_eksik_maliyet))
+        c2.metric("Gereken Toplam Adet", sayi_formatla(toplam_gereken))
+        c3.metric("Min. Tedarik Maliyeti", para_formatla(toplam_maliyet))
 
         st.warning(
-            f"**{len(kritik)} ürün** kritik eşiğin altında. "
-            f"Kritik eşiğe ulaşmak için toplam **{sayi_formatla(toplam_eksik_adet)} adet** "
-            f"tedarik gerekiyor (tahmini {para_formatla(toplam_eksik_maliyet)})."
+            f"**{len(kritik)} ürün** kritik eşiğinde veya altında. "
+            f"Hepsini kritik seviyenin üstüne çıkarmak için toplam "
+            f"**{sayi_formatla(toplam_gereken)} adet** tedarik gerekiyor "
+            f"(tahmini {para_formatla(toplam_maliyet)})."
         )
         st.divider()
 
         for u in kritik:
-            eksik  = max(0, u["kritik_esik"] - u["stok_miktari"])
-            maliyet = eksik * u["fiyat"]
             if u["stok_miktari"] == 0:
                 rozet = '<span class="rozet-kirmizi">Stok Tükendi</span>'
             else:
@@ -492,9 +487,9 @@ elif sayfa == "⚠️ Kritik Stok":
                 f'Kategori: <b>{html.escape(u["kategori_adi"] or "—")}</b> &nbsp;|&nbsp; '
                 f'Mevcut: <b>{sayi_formatla(u["stok_miktari"])} adet</b> &nbsp;|&nbsp; '
                 f'Kritik Eşik: <b>{u["kritik_esik"]} adet</b> &nbsp;|&nbsp; '
-                f'Eksik: <b>{sayi_formatla(eksik)} adet</b> &nbsp;|&nbsp; '
+                f'Gereken: <b>{sayi_formatla(u["gereken_adet"])} adet</b> &nbsp;|&nbsp; '
                 f'Birim Fiyat: <b>{para_formatla(u["fiyat"])}</b> &nbsp;|&nbsp; '
-                f'Tedarik Maliyeti: <b>{para_formatla(maliyet)}</b>'
+                f'Tedarik Maliyeti: <b>{para_formatla(u["tedarik_maliyeti"])}</b>'
                 f'</small></div>',
                 unsafe_allow_html=True,
             )

@@ -270,3 +270,21 @@ def test_ayni_saniyedeki_hareketler_giris_sirasina_gore_listelenir(servis, urun_
     beklenen = [16, 13, 11]  # en yeni en üstte; 10 başlangıç stoku
     assert [h["islem_sonrasi_stok"] for h in servis.hareket_gecmisi(baslangic="2026-05-01", bitis="2026-05-01")] == beklenen
     assert [h["islem_sonrasi_stok"] for h in servis.son_hareketler(10) if h["tarih"] == tarih] == beklenen
+
+
+# ── Kritik stok ──────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("stok, esik, gereken", [(3, 3, 1), (0, 0, 1), (2, 5, 4), (0, 10, 11)])
+def test_kritik_urun_icin_gereken_adet_en_az_bir(servis, kategori_id, stok, esik, gereken):
+    servis.urun_ekle("Pil", 12.5, stok, esik, kategori_id)
+    (kritik,) = servis.kritik_stok_kontrol()
+    assert kritik["gereken_adet"] == gereken
+    assert kritik["tedarik_maliyeti"] == 12.5 * gereken
+    # Gereken adet kadar giriş yapılınca ürün kritik listeden çıkar
+    servis.stok_girisi_yap(kritik["id"], gereken)
+    assert servis.kritik_stok_kontrol() == []
+
+
+def test_esigin_ustundeki_urun_kritik_degil(servis, kategori_id):
+    servis.urun_ekle("Pil", 1.0, 4, 3, kategori_id)
+    assert servis.kritik_stok_kontrol() == []

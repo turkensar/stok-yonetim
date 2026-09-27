@@ -25,7 +25,7 @@
 | **🏷️ Kategoriler** | Ekleme, silme, ürün sayısı gösterimi |
 | **📦 Ürünler** | Ekleme, güncelleme, silme (onay adımlı), arama, filtreleme |
 | **📋 Hareketler** | Stok giriş/çıkış, 5 boyutlu filtreleme, renk kodlu tür gösterimi |
-| **⚠️ Kritik Stok** | Eksik adet, tedarik maliyeti, stok tükenme uyarısı |
+| **⚠️ Kritik Stok** | Kritik seviyeden çıkmak için gereken adet, tedarik maliyeti, stok tükenme uyarısı |
 | **📈 Raporlama** | 4 farklı CSV dışa aktarma, demo veri yükleme |
 
 ### İş Kuralları
