@@ -184,7 +184,9 @@ def test_demo_verisi_urun_varken_yuklenmez(servis, urun_id):
 def test_csv_ciktilari(servis):
     assert servis.tum_urunler_csv_aktar() == ""
     servis.demo_veri_yukle()
-    assert servis.tum_urunler_csv_aktar().startswith("Ürün Adı,")
+    urunler_csv = servis.tum_urunler_csv_aktar()
+    assert urunler_csv.startswith("Ürün Adı;Kategori;")
+    assert "Laptop Dell XPS 15;Elektronik;35000,0;8;3;280000,0" in urunler_csv
     assert servis.dusuk_stok_csv_aktar().count("\n") == 3  # başlık + 2 kritik ürün
     assert servis.tum_hareketler_csv_aktar().count("\n") == 16
     assert "Elektronik" in servis.kategori_raporu_csv_aktar()
@@ -239,7 +241,7 @@ def test_toplam_deger_kurus_hassasiyetinde(servis, kategori_id):
         servis.urun_ekle(f"Ürün {i}", 0.1, 3, 0, kategori_id)
     assert servis.dashboard_verileri()["toplam_deger"] == 3.0
     assert db.kategori_dagilimi()[0]["toplam_deger"] == 3.0
-    assert "0.30000000000000004" not in servis.tum_urunler_csv_aktar()
+    assert "Ürün 0;Kırtasiye;0,1;3;0;0,3" in servis.tum_urunler_csv_aktar()
 
 
 def test_fiyat_kurusa_yuvarlanarak_saklanir(servis, kategori_id):

@@ -349,6 +349,10 @@ class StokServisi:
 
     @staticmethod
     def _df_to_csv(df: pd.DataFrame) -> str:
+        """
+        Türkçe bölge ayarlı Excel'in doğrudan açabileceği CSV üretir:
+        alan ayracı ';', ondalık ayracı ','. (UTF-8 BOM'u indirme sırasında eklenir.)
+        """
         buf = io.StringIO()
-        df.to_csv(buf, index=False, encoding="utf-8-sig")
+        df.to_csv(buf, index=False, sep=";", decimal=",")
         return buf.getvalue()
