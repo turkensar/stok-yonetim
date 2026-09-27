@@ -2,6 +2,8 @@
 Akıllı Stok Yönetim Sistemi — Streamlit Arayüzü
 """
 
+import html
+
 import pandas as pd
 import streamlit as st
 
@@ -134,7 +136,7 @@ if sayfa == "📊 Dashboard":
         yorumlar = servis.dashboard_analiz_yorumu(veri)
         for ikon, metin in yorumlar:
             st.markdown(
-                f'<div class="yorum-satir">{ikon} &nbsp; {metin}</div>',
+                f'<div class="yorum-satir">{ikon} &nbsp; {html.escape(metin)}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -481,9 +483,9 @@ elif sayfa == "⚠️ Kritik Stok":
 
             st.markdown(
                 f'<div class="kart">'
-                f'<div class="kart-baslik">{u["ad"]} &nbsp; {rozet}</div>'
+                f'<div class="kart-baslik">{html.escape(u["ad"])} &nbsp; {rozet}</div>'
                 f'<small>'
-                f'Kategori: <b>{u["kategori_adi"] or "—"}</b> &nbsp;|&nbsp; '
+                f'Kategori: <b>{html.escape(u["kategori_adi"] or "—")}</b> &nbsp;|&nbsp; '
                 f'Mevcut: <b>{sayi_formatla(u["stok_miktari"])} adet</b> &nbsp;|&nbsp; '
                 f'Kritik Eşik: <b>{u["kritik_esik"]} adet</b> &nbsp;|&nbsp; '
                 f'Eksik: <b>{sayi_formatla(eksik)} adet</b> &nbsp;|&nbsp; '

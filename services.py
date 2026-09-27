@@ -4,12 +4,13 @@ Veritabanı katmanını sarmalayarak uygulama mantığını yönetir.
 """
 
 import io
+from datetime import datetime, timedelta
 from typing import Optional
 
 import pandas as pd
 
 import database as db
-from models import Kategori, Urun, StokHareketi
+from models import Kategori, Urun
 
 # Dönüş tipi: (başarılı mı, mesaj)
 Sonuc = tuple[bool, str]
@@ -247,72 +248,85 @@ class StokServisi:
         return self._df_to_csv(df)
 
     def demo_veri_yukle(self) -> Sonuc:
-        """Gerçekçi demo verisi yükler. Zaten veri varsa atlar."""
-        if len(db.urunleri_getir()) >= 4:
-            return False, "Veritabanında zaten yeterli veri var."
+        """
+        Gerçekçi demo verisi yükler; yalnızca ürün yokken çalışır.
+        Tüm yükleme tek transaction'dır: hata olursa hiçbir şey yazılmaz.
+        Hareketler kronolojik sırayla uygulanır, böylece "işlem sonrası stok"
+        zinciri ve ürünlerin son stoğu birbiriyle tutarlı olur.
+        """
+        kategoriler_data = [
+            ("Elektronik",        "Bilgisayar ve çevre birimleri"),
+            ("Ofis & Kırtasiye",  "Kağıt, kalem ve ofis malzemeleri"),
+            ("Temizlik & Hijyen", "Temizlik ürünleri ve sarf malzemeleri"),
+        ]
+        # (ad, kategori sırası, fiyat, hedef son stok, kritik eşik) — bazıları kritik stokta
+        urunler_data = [
+            ("Laptop Dell XPS 15",        0, 35000.0,  8,  3),
+            ('Monitör 27" 4K',            0,  7500.0,  4,  5),   # kritik
+            ("Mekanik Klavye",            0,  1200.0, 12,  5),
+            ("USB Hub 7 Port",            0,   450.0,  9,  3),
+            ("A4 Fotokopi Kağıdı (koli)", 1,   350.0, 45, 10),
+            ("Tükenmez Kalem Seti",       1,    85.0,  3, 10),   # kritik
+            ("Dezenfektan 5L",            2,   280.0, 18,  5),
+            ("Kâğıt Havlu Koli",          2,    95.0, 22,  8),
+        ]
+        # (ürün sırası, tür, miktar, kaç gün önce, açıklama)
+        hareketler_data = [
+            (0, "giriş",  5, 28, "İlk sevkiyat"),
+            (0, "çıkış",  2, 21, "Satış - Müşteri A"),
+            (0, "çıkış",  1, 14, "Satış - Müşteri B"),
+            (1, "giriş",  3, 25, "Tedarikçi: TechPro"),
+            (1, "çıkış",  2, 10, "Ofis kurulumu"),
+            (2, "giriş", 10, 20, "Toplu sipariş"),
+            (2, "çıkış",  3,  8, "Yeni personel"),
+            (4, "giriş", 20, 15, "Aylık sipariş"),
+            (4, "çıkış",  8,  7, "Ofis kullanımı"),
+            (4, "çıkış",  3,  3, "Toplantı odası"),
+            (5, "giriş", 15, 30, "Başlangıç stoku"),
+            (5, "çıkış", 12,  5, "Satış"),
+            (6, "giriş", 10, 18, "Tedarikçi: CleanPro"),
+            (6, "çıkış",  4,  2, "Haftalık kullanım"),
+            (7, "giriş", 15, 12, "Toplu sipariş"),
+        ]
+
+        # Başlangıç stoku = hedef son stok − hareketlerin net etkisi
+        net = [0] * len(urunler_data)
+        for i, tur, miktar, _, _ in hareketler_data:
+            net[i] += miktar if tur == "giriş" else -miktar
+
         try:
-            from datetime import datetime, timedelta
-            def _kat_id(ad, aciklama):
-                """Kategori varsa id'sini döner, yoksa oluşturur."""
-                mevcut = next((k for k in db.kategorileri_getir() if k["ad"] == ad), None)
-                if mevcut:
-                    return mevcut["id"]
-                return db.kategori_ekle(Kategori(ad=ad, aciklama=aciklama))
+            with db.transaction() as conn:
+                if db.urun_sayisi(conn) > 0:
+                    return False, "Demo verisi yalnızca ürün bulunmayan bir veritabanına yüklenebilir."
 
-            # Kategoriler
-            k1 = _kat_id("Elektronik",       "Bilgisayar ve çevre birimleri")
-            k2 = _kat_id("Ofis & Kırtasiye", "Kağıt, kalem ve ofis malzemeleri")
-            k3 = _kat_id("Temizlik & Hijyen", "Temizlik ürünleri ve sarf malzemeleri")
+                kat_ids = []
+                for ad, aciklama in kategoriler_data:
+                    mevcut = db.kategori_adla_getir(ad, conn)
+                    kat_ids.append(
+                        mevcut["id"] if mevcut
+                        else db.kategori_ekle(Kategori(ad=ad, aciklama=aciklama), conn)
+                    )
 
-            # Ürünler (bazıları kritik stokta)
-            urunler_data = [
-                ("Laptop Dell XPS 15", k1, 35000.0, 8, 3),
-                ('Monitör 27" 4K', k1, 7500.0, 4, 5),      # kritik
-                ("Mekanik Klavye", k1, 1200.0, 12, 5),
-                ("USB Hub 7 Port", k1, 450.0, 9, 3),
-                ("A4 Fotokopi Kağıdı (koli)", k2, 350.0, 45, 10),
-                ("Tükenmez Kalem Seti", k2, 85.0, 3, 10),   # kritik
-                ("Dezenfektan 5L", k3, 280.0, 18, 5),
-                ("Kâğıt Havlu Koli", k3, 95.0, 22, 8),
-            ]
-            u_ids = []
-            for ad, kat, fiyat, stok, esik in urunler_data:
-                uid = db.urun_ekle(__import__('models').Urun(ad=ad, kategori_id=kat, fiyat=fiyat, stok_miktari=stok, kritik_esik=esik))
-                u_ids.append(uid)
+                u_ids = [
+                    db.urun_ekle(
+                        Urun(ad=ad, kategori_id=kat_ids[k], fiyat=fiyat,
+                             stok_miktari=hedef - net[i], kritik_esik=esik),
+                        conn,
+                    )
+                    for i, (ad, k, fiyat, hedef, esik) in enumerate(urunler_data)
+                ]
 
-            # Stok hareketleri (gerçekçi tarihler)
-            bugun = datetime.now()
-            hareketler = [
-                (u_ids[0], "giriş",  5, bugun - timedelta(days=28), "İlk sevkiyat"),
-                (u_ids[0], "çıkış",  2, bugun - timedelta(days=21), "Satış - Müşteri A"),
-                (u_ids[0], "çıkış",  1, bugun - timedelta(days=14), "Satış - Müşteri B"),
-                (u_ids[1], "giriş",  3, bugun - timedelta(days=25), "Tedarikçi: TechPro"),
-                (u_ids[1], "çıkış",  2, bugun - timedelta(days=10), "Ofis kurulumu"),
-                (u_ids[2], "giriş", 10, bugun - timedelta(days=20), "Toplu sipariş"),
-                (u_ids[2], "çıkış",  3, bugun - timedelta(days=8),  "Yeni personel"),
-                (u_ids[4], "giriş", 20, bugun - timedelta(days=15), "Aylık sipariş"),
-                (u_ids[4], "çıkış",  8, bugun - timedelta(days=7),  "Ofis kullanımı"),
-                (u_ids[4], "çıkış",  3, bugun - timedelta(days=3),  "Toplantı odası"),
-                (u_ids[5], "giriş", 15, bugun - timedelta(days=30), "Başlangıç stoku"),
-                (u_ids[5], "çıkış", 12, bugun - timedelta(days=5),  "Satış"),
-                (u_ids[6], "giriş", 10, bugun - timedelta(days=18), "Tedarikçi: CleanPro"),
-                (u_ids[6], "çıkış",  4, bugun - timedelta(days=2),  "Haftalık kullanım"),
-                (u_ids[7], "giriş", 15, bugun - timedelta(days=12), "Toplu sipariş"),
-            ]
-            for uid, tur, miktar, tarih, aciklama in hareketler:
-                urun = db.urun_getir(uid)
-                if tur == "giriş":
-                    yeni = urun["stok_miktari"] + miktar
-                else:
-                    yeni = max(0, urun["stok_miktari"] - miktar)
-                h = StokHareketi(urun_id=uid, tur=tur, miktar=miktar,
-                                 islem_sonrasi_stok=yeni, aciklama=aciklama,
-                                 tarih=tarih.strftime("%Y-%m-%d %H:%M:%S"))
-                db.hareket_ekle(h)
-
-            return True, "Demo verisi başarıyla yüklendi (3 kategori, 8 ürün, 15 hareket)."
+                bugun = datetime.now()
+                for i, tur, miktar, gun, aciklama in sorted(hareketler_data, key=lambda h: -h[3]):
+                    tarih = (bugun - timedelta(days=gun)).strftime("%Y-%m-%d %H:%M:%S")
+                    db.stok_hareketi_uygula(u_ids[i], tur, miktar, aciklama, tarih=tarih, conn=conn)
         except Exception as e:
             return False, f"Demo veri yüklenemedi: {e}"
+
+        return True, (
+            f"Demo verisi başarıyla yüklendi ({len(kategoriler_data)} kategori, "
+            f"{len(urunler_data)} ürün, {len(hareketler_data)} hareket)."
+        )
 
     @staticmethod
     def _df_to_csv(df: pd.DataFrame) -> str:

@@ -51,6 +51,24 @@ def get_connection() -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+@contextmanager
+def transaction() -> Iterator[sqlite3.Connection]:
+    """Yazma kilidini baştan alan (BEGIN IMMEDIATE) bir transaction açar."""
+    with get_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        yield conn
+
+
+@contextmanager
+def _baglanti(conn: Optional[sqlite3.Connection]) -> Iterator[sqlite3.Connection]:
+    """Verilen bağlantıyı kullanır; yoksa kendi bağlantısını açıp kapatır."""
+    if conn is not None:
+        yield conn
+    else:
+        with get_connection() as yeni:
+            yield yeni
+
+
 _KATEGORILER_SEMA = """
     CREATE TABLE IF NOT EXISTS kategoriler (
         id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -159,8 +177,8 @@ def init_db() -> None:
 # Kategoriler
 # ─────────────────────────────────────────────────────────────────────────────
 
-def kategori_ekle(k: Kategori) -> int:
-    with get_connection() as conn:
+def kategori_ekle(k: Kategori, conn: Optional[sqlite3.Connection] = None) -> int:
+    with _baglanti(conn) as conn:
         cur = conn.execute(
             "INSERT INTO kategoriler (ad, aciklama) VALUES (?, ?)",
             (k.ad, k.aciklama),
@@ -172,6 +190,14 @@ def kategorileri_getir() -> list[dict]:
     with get_connection() as conn:
         rows = conn.execute("SELECT * FROM kategoriler ORDER BY ad").fetchall()
     return [dict(r) for r in rows]
+
+
+def kategori_adla_getir(
+    ad: str, conn: Optional[sqlite3.Connection] = None
+) -> Optional[dict]:
+    with _baglanti(conn) as conn:
+        row = conn.execute("SELECT * FROM kategoriler WHERE ad = ?", (ad,)).fetchone()
+    return dict(row) if row else None
 
 
 def kategori_getir(kategori_id: int) -> Optional[dict]:
@@ -191,8 +217,8 @@ def kategori_sil(kategori_id: int) -> None:
 # Ürünler
 # ─────────────────────────────────────────────────────────────────────────────
 
-def urun_ekle(u: Urun) -> int:
-    with get_connection() as conn:
+def urun_ekle(u: Urun, conn: Optional[sqlite3.Connection] = None) -> int:
+    with _baglanti(conn) as conn:
         cur = conn.execute(
             """INSERT INTO urunler (ad, kategori_id, fiyat, stok_miktari, kritik_esik)
                VALUES (?, ?, ?, ?, ?)""",
@@ -250,6 +276,11 @@ def urun_sil(urun_id: int) -> None:
         conn.execute("DELETE FROM urunler WHERE id = ?", (urun_id,))
 
 
+def urun_sayisi(conn: Optional[sqlite3.Connection] = None) -> int:
+    with _baglanti(conn) as conn:
+        return conn.execute("SELECT COUNT(*) FROM urunler").fetchone()[0]
+
+
 def urun_hareket_sayisi(urun_id: int) -> int:
     with get_connection() as conn:
         row = conn.execute(
@@ -263,32 +294,22 @@ def urun_hareket_sayisi(urun_id: int) -> int:
 # Stok Hareketleri
 # ─────────────────────────────────────────────────────────────────────────────
 
-def hareket_ekle(h: StokHareketi) -> int:
-    with get_connection() as conn:
-        cur = conn.execute(
-            """INSERT INTO stok_hareketleri
-               (urun_id, tur, miktar, tarih, aciklama, islem_sonrasi_stok)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (h.urun_id, h.tur, h.miktar, h.tarih, h.aciklama, h.islem_sonrasi_stok),
-        )
-        return cur.lastrowid
-
-
 def stok_hareketi_uygula(
     urun_id: int,
     tur: str,
     miktar: int,
     aciklama: str = "",
     tarih: Optional[str] = None,
+    conn: Optional[sqlite3.Connection] = None,
 ) -> dict:
     """
     Stoğu günceller ve hareketi kaydeder — ikisi tek transaction içinde.
     Stok, okuma-yazma yarışına düşmemek için SQL tarafında atomik olarak değişir.
     Ürün yoksa LookupError, stok yetmezse YetersizStokHatasi fırlatır.
+    `conn` verilirse çağıranın transaction'ı içinde çalışır.
     """
     delta = miktar if tur == "giriş" else -miktar
-    with get_connection() as conn:
-        conn.execute("BEGIN IMMEDIATE")
+    with (_baglanti(conn) if conn is not None else transaction()) as conn:
         cur = conn.execute(
             """UPDATE urunler SET stok_miktari = stok_miktari + ?
                WHERE id = ? AND stok_miktari + ? >= 0""",
