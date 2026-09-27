@@ -196,6 +196,9 @@ class StokServisi:
         tur: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> list[dict]:
+        """Tarihler 'YYYY-AA-GG' biçimindedir; ters aralık ValueError fırlatır."""
+        if baslangic and bitis and baslangic > bitis:
+            raise ValueError("Başlangıç tarihi bitiş tarihinden sonra olamaz.")
         return db.hareketleri_getir(
             urun_id=urun_id, baslangic=baslangic, bitis=bitis, tur=tur, limit=limit
         )

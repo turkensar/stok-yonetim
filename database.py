@@ -447,7 +447,7 @@ def hareketleri_getir(
     if tur:
         query += " AND sh.tur = ?"
         params.append(tur)
-    query += " ORDER BY sh.tarih DESC"
+    query += " ORDER BY sh.tarih DESC, sh.id DESC"
     if limit:
         query += f" LIMIT {int(limit)}"
 
@@ -462,7 +462,7 @@ def son_hareketleri_getir(n: int = 10) -> list[dict]:
             f"""SELECT sh.*, {_URUN_ADI_SQL} AS urun_adi
                FROM stok_hareketleri sh
                JOIN urunler u ON sh.urun_id = u.id
-               ORDER BY sh.tarih DESC LIMIT ?""",
+               ORDER BY sh.tarih DESC, sh.id DESC LIMIT ?""",
             (n,),
         ).fetchall()
     return [dict(r) for r in rows]

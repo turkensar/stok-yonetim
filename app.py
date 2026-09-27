@@ -415,15 +415,21 @@ elif sayfa == "📋 Hareketler":
         limit      = f5.selectbox("Kayıt Sayısı", [10, 20, 50, 100, 0],
                                    format_func=lambda x: "Tümü" if x == 0 else str(x))
 
-        hareketler = servis.hareket_gecmisi(
-            urun_id=filtre_urun if filtre_urun else None,
-            baslangic=str(baslangic) if baslangic else None,
-            bitis=str(bitis) if bitis else None,
-            tur=filtre_tur if filtre_tur != "Tümü" else None,
-            limit=limit if limit else None,
-        )
+        try:
+            hareketler = servis.hareket_gecmisi(
+                urun_id=filtre_urun if filtre_urun else None,
+                baslangic=str(baslangic) if baslangic else None,
+                bitis=str(bitis) if bitis else None,
+                tur=filtre_tur if filtre_tur != "Tümü" else None,
+                limit=limit if limit else None,
+            )
+        except ValueError as e:
+            st.error(str(e))
+            hareketler = None
 
-        if hareketler:
+        if hareketler is None:
+            pass
+        elif hareketler:
             df_h = pd.DataFrame(hareketler)[[
                 "tarih", "urun_adi", "tur", "miktar", "islem_sonrasi_stok", "aciklama"
             ]]

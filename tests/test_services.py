@@ -247,3 +247,26 @@ def test_toplam_deger_kurus_hassasiyetinde(servis, kategori_id):
 def test_fiyat_kurusa_yuvarlanarak_saklanir(servis, kategori_id):
     servis.urun_ekle("Vida", 1.005, 0, 0, kategori_id)
     assert servis.urunleri_getir()[0]["fiyat"] == 1.01
+
+
+# ── Hareket geçmişi ──────────────────────────────────────────────────────────
+
+def test_ters_tarih_araligi_reddedilir(servis):
+    with pytest.raises(ValueError, match="Başlangıç tarihi"):
+        servis.hareket_gecmisi(baslangic="2026-05-10", bitis="2026-05-01")
+
+
+def test_tarih_araligi_filtresi(servis, urun_id):
+    db.stok_hareketi_uygula(urun_id, "giriş", 1, tarih="2026-05-01 09:00:00")
+    db.stok_hareketi_uygula(urun_id, "giriş", 2, tarih="2026-05-10 23:30:00")
+    sonuc = servis.hareket_gecmisi(baslangic="2026-05-01", bitis="2026-05-10")
+    assert [h["miktar"] for h in sonuc] == [2, 1]
+
+
+def test_ayni_saniyedeki_hareketler_giris_sirasina_gore_listelenir(servis, urun_id):
+    tarih = "2026-05-01 12:00:00"
+    for miktar in (1, 2, 3):
+        db.stok_hareketi_uygula(urun_id, "giriş", miktar, tarih=tarih)
+    beklenen = [16, 13, 11]  # en yeni en üstte; 10 başlangıç stoku
+    assert [h["islem_sonrasi_stok"] for h in servis.hareket_gecmisi(baslangic="2026-05-01", bitis="2026-05-01")] == beklenen
+    assert [h["islem_sonrasi_stok"] for h in servis.son_hareketler(10) if h["tarih"] == tarih] == beklenen

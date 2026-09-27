@@ -41,3 +41,12 @@ def test_basari_mesaji_yenilemeden_sonra_gorunur(servis):
     at.button[0].click().run()  # ilk form: Giriş Yap
     assert not at.exception
     assert [t.value for t in at.toast] == ["✅ 4 adet giriş yapıldı. Yeni stok: 16"]
+
+
+def test_ters_tarih_araligi_hata_gosterir(servis):
+    from datetime import date
+    at = _hareketler_sayfasi(servis)
+    at.date_input[0].set_value(date(2026, 5, 10))
+    at.date_input[1].set_value(date(2026, 5, 1)).run()
+    assert not at.exception
+    assert [e.value for e in at.error] == ["Başlangıç tarihi bitiş tarihinden sonra olamaz."]
