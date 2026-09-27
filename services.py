@@ -121,51 +121,31 @@ class StokServisi:
     def stok_girisi_yap(self, urun_id: int, miktar: int, aciklama: str = "") -> Sonuc:
         if miktar <= 0:
             return False, "Giriş miktarı sıfırdan büyük olmalıdır."
-        urun = db.urun_getir(urun_id)
-        if not urun:
-            return False, "Ürün bulunamadı."
-        yeni_stok = urun["stok_miktari"] + miktar
         try:
-            h = StokHareketi(
-                urun_id=urun_id,
-                tur="giriş",
-                miktar=miktar,
-                islem_sonrasi_stok=yeni_stok,
-                aciklama=aciklama,
-            )
-            db.hareket_ekle(h)
-            db.urun_stok_guncelle(urun_id, yeni_stok)
-            return True, f"✅ {miktar} adet giriş yapıldı. Yeni stok: {yeni_stok}"
+            sonuc = db.stok_hareketi_uygula(urun_id, "giriş", miktar, aciklama)
+        except LookupError:
+            return False, "Ürün bulunamadı."
         except Exception as e:
             return False, f"Stok girişi yapılamadı: {e}"
+        return True, f"✅ {miktar} adet giriş yapıldı. Yeni stok: {sonuc['yeni_stok']}"
 
     def stok_cikisi_yap(self, urun_id: int, miktar: int, aciklama: str = "") -> Sonuc:
         if miktar <= 0:
             return False, "Çıkış miktarı sıfırdan büyük olmalıdır."
-        urun = db.urun_getir(urun_id)
-        if not urun:
+        try:
+            sonuc = db.stok_hareketi_uygula(urun_id, "çıkış", miktar, aciklama)
+        except LookupError:
             return False, "Ürün bulunamadı."
-        if urun["stok_miktari"] < miktar:
+        except db.YetersizStokHatasi as e:
             return (
                 False,
-                f"Yetersiz stok! Mevcut: {urun['stok_miktari']} adet, "
-                f"talep edilen: {miktar} adet.",
+                f"Yetersiz stok! Mevcut: {e.mevcut} adet, talep edilen: {e.talep} adet.",
             )
-        yeni_stok = urun["stok_miktari"] - miktar
-        try:
-            h = StokHareketi(
-                urun_id=urun_id,
-                tur="çıkış",
-                miktar=miktar,
-                islem_sonrasi_stok=yeni_stok,
-                aciklama=aciklama,
-            )
-            db.hareket_ekle(h)
-            db.urun_stok_guncelle(urun_id, yeni_stok)
-            uyari = " ⚠️ Kritik stok seviyesine ulaşıldı!" if yeni_stok <= urun["kritik_esik"] else ""
-            return True, f"✅ {miktar} adet çıkış yapıldı. Yeni stok: {yeni_stok}{uyari}"
         except Exception as e:
             return False, f"Stok çıkışı yapılamadı: {e}"
+        yeni_stok = sonuc["yeni_stok"]
+        uyari = " ⚠️ Kritik stok seviyesine ulaşıldı!" if yeni_stok <= sonuc["kritik_esik"] else ""
+        return True, f"✅ {miktar} adet çıkış yapıldı. Yeni stok: {yeni_stok}{uyari}"
 
     # ── Raporlama ─────────────────────────────────────────────────────────────
 

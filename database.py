@@ -5,58 +5,154 @@ Veritabanı katmanı — SQLite bağlantısı ve CRUD fonksiyonları.
 
 import os
 import sqlite3
-from typing import Optional
+from contextlib import contextmanager
+from typing import Iterator, Optional
 
 from models import Kategori, Urun, StokHareketi
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "stok.db")
+
+# Şema her değiştiğinde artırılır; init_db eksik migration'ları sırayla uygular.
+SEMA_SURUMU = 1
+
+
+class YetersizStokHatasi(Exception):
+    """Çıkış miktarı mevcut stoğu aştığında fırlatılır."""
+
+    def __init__(self, mevcut: int, talep: int):
+        super().__init__(f"Yetersiz stok: mevcut {mevcut}, talep {talep}")
+        self.mevcut = mevcut
+        self.talep = talep
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Bağlantı
 # ─────────────────────────────────────────────────────────────────────────────
 
-def get_connection() -> sqlite3.Connection:
+def _baglan() -> sqlite3.Connection:
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
+@contextmanager
+def get_connection() -> Iterator[sqlite3.Connection]:
+    """Başarıda commit, hatada rollback yapar ve bağlantıyı her durumda kapatır."""
+    conn = _baglan()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+_KATEGORILER_SEMA = """
+    CREATE TABLE IF NOT EXISTS kategoriler (
+        id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        ad       TEXT    NOT NULL UNIQUE,
+        aciklama TEXT    DEFAULT ''
+    )
+"""
+
+_URUNLER_SEMA = """
+    CREATE TABLE IF NOT EXISTS urunler (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        ad            TEXT    NOT NULL,
+        kategori_id   INTEGER,
+        fiyat         REAL    NOT NULL DEFAULT 0 CHECK (fiyat >= 0),
+        stok_miktari  INTEGER NOT NULL DEFAULT 0 CHECK (stok_miktari >= 0),
+        kritik_esik   INTEGER NOT NULL DEFAULT 5 CHECK (kritik_esik >= 0),
+        FOREIGN KEY (kategori_id) REFERENCES kategoriler(id)
+    )
+"""
+
+_HAREKETLER_SEMA = """
+    CREATE TABLE IF NOT EXISTS stok_hareketleri (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        urun_id             INTEGER NOT NULL,
+        tur                 TEXT    NOT NULL CHECK (tur IN ('giriş', 'çıkış')),
+        miktar              INTEGER NOT NULL CHECK (miktar > 0),
+        tarih               TEXT    NOT NULL,
+        aciklama            TEXT    DEFAULT '',
+        islem_sonrasi_stok  INTEGER NOT NULL CHECK (islem_sonrasi_stok >= 0),
+        FOREIGN KEY (urun_id) REFERENCES urunler(id)
+    )
+"""
+
+
+def _tablo_var_mi(conn: sqlite3.Connection, ad: str) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (ad,)
+    ).fetchone() is not None
+
+
+def _migration_1(conn: sqlite3.Connection) -> None:
+    """CHECK kısıtları ve indeksler. Eski şemalı tablolar yeniden kurulur."""
+    eski_urunler = _tablo_var_mi(conn, "urunler")
+    eski_hareketler = _tablo_var_mi(conn, "stok_hareketleri")
+    if eski_urunler:
+        conn.execute("ALTER TABLE urunler RENAME TO _urunler_eski")
+    if eski_hareketler:
+        conn.execute("ALTER TABLE stok_hareketleri RENAME TO _hareketler_eski")
+
+    conn.execute(_KATEGORILER_SEMA)
+    conn.execute(_URUNLER_SEMA)
+    conn.execute(_HAREKETLER_SEMA)
+
+    if eski_urunler:
+        conn.execute(
+            """INSERT INTO urunler (id, ad, kategori_id, fiyat, stok_miktari, kritik_esik)
+               SELECT id, ad, kategori_id, MAX(fiyat, 0), MAX(stok_miktari, 0),
+                      MAX(kritik_esik, 0)
+               FROM _urunler_eski"""
+        )
+        conn.execute("DROP TABLE _urunler_eski")
+    if eski_hareketler:
+        conn.execute(
+            """INSERT INTO stok_hareketleri
+               (id, urun_id, tur, miktar, tarih, aciklama, islem_sonrasi_stok)
+               SELECT id, urun_id, tur, miktar, tarih, aciklama,
+                      MAX(islem_sonrasi_stok, 0)
+               FROM _hareketler_eski"""
+        )
+        conn.execute("DROP TABLE _hareketler_eski")
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_hareket_urun_tarih "
+        "ON stok_hareketleri (urun_id, tarih)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_hareket_tarih ON stok_hareketleri (tarih)"
+    )
+
+
+_MIGRATIONLAR = {1: _migration_1}
+
+
 def init_db() -> None:
-    """Tablolar yoksa oluşturur. Uygulama ilk açılışında çağrılır."""
-    with get_connection() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS kategoriler (
-                id       INTEGER PRIMARY KEY AUTOINCREMENT,
-                ad       TEXT    NOT NULL UNIQUE,
-                aciklama TEXT    DEFAULT ''
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS urunler (
-                id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                ad            TEXT    NOT NULL,
-                kategori_id   INTEGER,
-                fiyat         REAL    NOT NULL DEFAULT 0,
-                stok_miktari  INTEGER NOT NULL DEFAULT 0,
-                kritik_esik   INTEGER NOT NULL DEFAULT 5,
-                FOREIGN KEY (kategori_id) REFERENCES kategoriler(id)
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS stok_hareketleri (
-                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-                urun_id             INTEGER NOT NULL,
-                tur                 TEXT    NOT NULL,
-                miktar              INTEGER NOT NULL,
-                tarih               TEXT    NOT NULL,
-                aciklama            TEXT    DEFAULT '',
-                islem_sonrasi_stok  INTEGER NOT NULL,
-                FOREIGN KEY (urun_id) REFERENCES urunler(id)
-            )
-        """)
+    """Tabloları oluşturur ve bekleyen şema migration'larını uygular."""
+    conn = _baglan()
+    conn.isolation_level = None  # transaction'ları elle yönetiyoruz
+    try:
+        # Tablo yeniden kurulurken FK kontrolü kapalı olmalı (transaction dışında ayarlanır).
+        conn.execute("PRAGMA foreign_keys = OFF")
+        surum = conn.execute("PRAGMA user_version").fetchone()[0]
+        for hedef in range(surum + 1, SEMA_SURUMU + 1):
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                _MIGRATIONLAR[hedef](conn)
+                conn.execute(f"PRAGMA user_version = {hedef}")
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
+    finally:
+        conn.close()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -148,14 +244,6 @@ def urun_guncelle(u: Urun) -> None:
         )
 
 
-def urun_stok_guncelle(urun_id: int, yeni_stok: int) -> None:
-    with get_connection() as conn:
-        conn.execute(
-            "UPDATE urunler SET stok_miktari = ? WHERE id = ?",
-            (yeni_stok, urun_id),
-        )
-
-
 def urun_sil(urun_id: int) -> None:
     with get_connection() as conn:
         conn.execute("DELETE FROM stok_hareketleri WHERE urun_id = ?", (urun_id,))
@@ -184,6 +272,55 @@ def hareket_ekle(h: StokHareketi) -> int:
             (h.urun_id, h.tur, h.miktar, h.tarih, h.aciklama, h.islem_sonrasi_stok),
         )
         return cur.lastrowid
+
+
+def stok_hareketi_uygula(
+    urun_id: int,
+    tur: str,
+    miktar: int,
+    aciklama: str = "",
+    tarih: Optional[str] = None,
+) -> dict:
+    """
+    Stoğu günceller ve hareketi kaydeder — ikisi tek transaction içinde.
+    Stok, okuma-yazma yarışına düşmemek için SQL tarafında atomik olarak değişir.
+    Ürün yoksa LookupError, stok yetmezse YetersizStokHatasi fırlatır.
+    """
+    delta = miktar if tur == "giriş" else -miktar
+    with get_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        cur = conn.execute(
+            """UPDATE urunler SET stok_miktari = stok_miktari + ?
+               WHERE id = ? AND stok_miktari + ? >= 0""",
+            (delta, urun_id, delta),
+        )
+        if cur.rowcount == 0:
+            row = conn.execute(
+                "SELECT stok_miktari FROM urunler WHERE id = ?", (urun_id,)
+            ).fetchone()
+            if row is None:
+                raise LookupError("Ürün bulunamadı.")
+            raise YetersizStokHatasi(row["stok_miktari"], miktar)
+
+        urun = conn.execute(
+            "SELECT stok_miktari, kritik_esik FROM urunler WHERE id = ?", (urun_id,)
+        ).fetchone()
+        h = StokHareketi(
+            urun_id=urun_id,
+            tur=tur,
+            miktar=miktar,
+            islem_sonrasi_stok=urun["stok_miktari"],
+            aciklama=aciklama,
+        )
+        if tarih:
+            h.tarih = tarih
+        conn.execute(
+            """INSERT INTO stok_hareketleri
+               (urun_id, tur, miktar, tarih, aciklama, islem_sonrasi_stok)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (h.urun_id, h.tur, h.miktar, h.tarih, h.aciklama, h.islem_sonrasi_stok),
+        )
+    return {"yeni_stok": urun["stok_miktari"], "kritik_esik": urun["kritik_esik"]}
 
 
 def hareketleri_getir(
