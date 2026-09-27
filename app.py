@@ -165,7 +165,7 @@ if sayfa == "📊 Dashboard":
                 return ["", "", c, "", ""]
             st.dataframe(
                 df_son.style.apply(_tur_renk, axis=1),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
         else:
             st.info("Henüz hareket kaydı yok.")
@@ -179,14 +179,14 @@ if sayfa == "📊 Dashboard":
             df_d = pd.DataFrame(dagilim)
             df_d["toplam_deger"] = df_d["toplam_deger"].apply(para_formatla)
             df_d.columns = ["Kategori", "Ürün Sayısı", "Toplam Değer"]
-            st.dataframe(df_d, use_container_width=True, hide_index=True)
+            st.dataframe(df_d, width="stretch", hide_index=True)
 
         # Kritik stok özeti
         st.markdown("#### ⚠️ Kritik Stok")
         if kritik_liste:
             df_k = pd.DataFrame(kritik_liste)[["ad", "stok_miktari", "kritik_esik"]]
             df_k.columns = ["Ürün", "Stok", "Eşik"]
-            st.dataframe(df_k, use_container_width=True, hide_index=True)
+            st.dataframe(df_k, width="stretch", hide_index=True)
         else:
             st.success("Kritik stok yok.")
 
@@ -202,7 +202,7 @@ elif sayfa == "🏷️ Kategoriler":
         with st.form("kat_form", clear_on_submit=True):
             ad       = st.text_input("Kategori Adı *")
             aciklama = st.text_input("Açıklama")
-            if st.form_submit_button("Ekle", use_container_width=True, type="primary"):
+            if st.form_submit_button("Ekle", width="stretch", type="primary"):
                 basari, mesaj = servis.kategori_ekle(ad, aciklama)
                 _bildir(basari, mesaj)
 
@@ -270,7 +270,7 @@ elif sayfa == "📦 Ürünler":
             goster["toplam_deger"] = goster["toplam_deger"].apply(para_formatla)
             goster.columns = ["Ürün Adı", "Kategori", "Birim Fiyat",
                               "Stok", "Kritik Eşik", "Toplam Değer", "Durum"]
-            st.dataframe(goster, use_container_width=True, hide_index=True)
+            st.dataframe(goster, width="stretch", hide_index=True)
             st.caption(f"{len(urunler)} ürün listeleniyor.")
         else:
             st.info("Ürün bulunamadı.")
@@ -289,7 +289,7 @@ elif sayfa == "📦 Ürünler":
                 kritik_esik = c3.number_input("Kritik Eşik", min_value=0, step=1, value=5)
                 kat_id      = c4.selectbox("Kategori *", list(kat_map.keys()),
                                            format_func=lambda x: kat_map[x])
-                if st.form_submit_button("Ürün Ekle", use_container_width=True, type="primary"):
+                if st.form_submit_button("Ürün Ekle", width="stretch", type="primary"):
                     basari, mesaj = servis.urun_ekle(
                         ad, float(fiyat), int(stok_miktari), int(kritik_esik), int(kat_id)
                     )
@@ -326,8 +326,8 @@ elif sayfa == "📦 Ürünler":
                                              index=kat_idx, format_func=lambda x: kat_map[x])
 
                     col_g, col_s = st.columns(2)
-                    guncelle = col_g.form_submit_button("💾 Güncelle", use_container_width=True, type="primary")
-                    sil_btn  = col_s.form_submit_button("🗑️ Sil",      use_container_width=True)
+                    guncelle = col_g.form_submit_button("💾 Güncelle", width="stretch", type="primary")
+                    sil_btn  = col_s.form_submit_button("🗑️ Sil",      width="stretch")
 
                     if guncelle:
                         basari, mesaj = servis.urun_guncelle(
@@ -345,11 +345,11 @@ elif sayfa == "📦 Ürünler":
                     f"stok hareketleri geçmişte korunur."
                 )
                 col_evet, col_vazgec = st.columns(2)
-                if col_evet.button("✅ Evet, Sil", type="primary", use_container_width=True):
+                if col_evet.button("✅ Evet, Sil", type="primary", width="stretch"):
                     basari, mesaj = servis.urun_sil(secili_id)
                     st.session_state.pop("sil_onayi_id", None)
                     _bildir(basari, mesaj)
-                if col_vazgec.button("❌ Vazgeç", use_container_width=True):
+                if col_vazgec.button("❌ Vazgeç", width="stretch"):
                     st.session_state.pop("sil_onayi_id", None)
                     st.rerun()
 
@@ -379,7 +379,7 @@ elif sayfa == "📋 Hareketler":
             with st.form("giris_form", clear_on_submit=True):
                 miktar   = st.number_input("Giriş Miktarı (adet)", min_value=1, step=1)
                 aciklama = st.text_input("Açıklama", placeholder="Tedarikçi adı, sipariş no...")
-                if st.form_submit_button("Giriş Yap", use_container_width=True, type="primary"):
+                if st.form_submit_button("Giriş Yap", width="stretch", type="primary"):
                     basari, mesaj = servis.stok_girisi_yap(uid, int(miktar), aciklama)
                     _bildir(basari, mesaj)
 
@@ -398,7 +398,7 @@ elif sayfa == "📋 Hareketler":
             with st.form("cikis_form", clear_on_submit=True):
                 miktar   = st.number_input("Çıkış Miktarı (adet)", min_value=1, step=1)
                 aciklama = st.text_input("Açıklama", placeholder="Satış, fire, iade...")
-                if st.form_submit_button("Çıkış Yap", use_container_width=True, type="primary"):
+                if st.form_submit_button("Çıkış Yap", width="stretch", type="primary"):
                     basari, mesaj = servis.stok_cikisi_yap(uid, int(miktar), aciklama)
                     _bildir(basari, mesaj)
 
@@ -434,7 +434,7 @@ elif sayfa == "📋 Hareketler":
                 return ["", "", c, "", "", ""]
             st.dataframe(
                 df_h.style.apply(_tur_r, axis=1),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
             st.caption(f"{len(hareketler)} hareket kaydı listeleniyor.")
         else:
@@ -517,7 +517,7 @@ elif sayfa == "📈 Raporlama":
                 "⬇️ Tüm Ürünleri İndir",
                 data=csv.encode("utf-8-sig") if csv else b"",
                 file_name="tum_urunler.csv", mime="text/csv",
-                use_container_width=True, disabled=not csv,
+                width="stretch", disabled=not csv,
             )
 
         # Kritik stok
@@ -528,7 +528,7 @@ elif sayfa == "📈 Raporlama":
                 "⬇️ Kritik Stoku İndir",
                 data=csv_k.encode("utf-8-sig") if csv_k else b"",
                 file_name="kritik_stok.csv", mime="text/csv",
-                use_container_width=True, disabled=not csv_k,
+                width="stretch", disabled=not csv_k,
             )
 
         col3, col4 = st.columns(2)
@@ -541,7 +541,7 @@ elif sayfa == "📈 Raporlama":
                 "⬇️ Hareketleri İndir",
                 data=csv_h.encode("utf-8-sig") if csv_h else b"",
                 file_name="stok_hareketleri.csv", mime="text/csv",
-                use_container_width=True, disabled=not csv_h,
+                width="stretch", disabled=not csv_h,
             )
 
         # Kategori raporu
@@ -552,7 +552,7 @@ elif sayfa == "📈 Raporlama":
                 "⬇️ Kategori Raporunu İndir",
                 data=csv_d.encode("utf-8-sig") if csv_d else b"",
                 file_name="kategori_raporu.csv", mime="text/csv",
-                use_container_width=True, disabled=not csv_d,
+                width="stretch", disabled=not csv_d,
             )
 
         # Önizleme
@@ -569,7 +569,7 @@ elif sayfa == "📈 Raporlama":
             )
             goster = df[["ad", "kategori_adi", "fiyat", "stok_miktari", "toplam_deger", "durum"]]
             goster.columns = ["Ürün", "Kategori", "Birim Fiyat", "Stok", "Toplam Değer", "Durum"]
-            st.dataframe(goster, use_container_width=True, hide_index=True)
+            st.dataframe(goster, width="stretch", hide_index=True)
 
     with tab_demo:
         st.markdown("#### Demo Veri Yükle")
@@ -578,6 +578,6 @@ elif sayfa == "📈 Raporlama":
             "gerçekçi örnek veri ekler.\n\n"
             "**3 kategori · 8 ürün · 15 stok hareketi · 2 kritik ürün**"
         )
-        if st.button("🧪 Demo Verisi Yükle", type="primary", use_container_width=True):
+        if st.button("🧪 Demo Verisi Yükle", type="primary", width="stretch"):
             basari, mesaj = servis.demo_veri_yukle()
             _bildir(basari, mesaj)

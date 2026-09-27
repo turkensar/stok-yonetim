@@ -3,7 +3,7 @@
 > Küçük ve orta ölçekli işletmelerin ürün envanterini, stok giriş-çıkışlarını ve kritik stok durumlarını takip edebileceği; Python OOP mimarisinde geliştirilmiş, SQLite destekli ve Streamlit tabanlı bir yönetim uygulaması.
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.35%2B-FF4B4B?logo=streamlit&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.49%2B-FF4B4B?logo=streamlit&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-3-lightgrey?logo=sqlite&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
