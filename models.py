@@ -5,7 +5,30 @@ Katmanlar arası veri taşıma için dataclass kullanılır.
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Optional
+
+
+def tr_kucuk(metin: str) -> str:
+    """
+    Türkçe kurallarıyla küçük harfe çevirir: 'I' → 'ı', 'İ' → 'i'.
+    str.lower() ve SQLite LOWER() bu harfleri doğru dönüştürmez.
+    """
+    return metin.replace("I", "ı").replace("İ", "i").lower()
+
+
+def kurusa_cevir(tutar: float) -> int:
+    """
+    TL tutarını kuruş cinsinden tamsayıya çevirir (yarımlar yukarı yuvarlanır).
+    Float çarpımı yerine Decimal kullanılır: 1.005 * 100 = 100.49999… hatasını önler.
+    """
+    try:
+        d = Decimal(str(tutar))
+    except InvalidOperation:
+        raise ValueError("Geçersiz tutar.") from None
+    if not d.is_finite():
+        raise ValueError("Geçersiz tutar.")
+    return int((d * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
 @dataclass
@@ -33,7 +56,7 @@ class Urun:
         self.ad = self.ad.strip()
         if not self.ad:
             raise ValueError("Ürün adı boş olamaz.")
-        if self.fiyat < 0:
+        if kurusa_cevir(self.fiyat) < 0:
             raise ValueError("Fiyat negatif olamaz.")
         if self.stok_miktari < 0:
             raise ValueError("Stok miktarı negatif olamaz.")
@@ -42,13 +65,18 @@ class Urun:
 
     @property
     def kritik_mi(self) -> bool:
-        """Stok miktarı kritik eşiğin altındaysa True döner."""
+        """Stok miktarı kritik eşiğinde veya altındaysa True döner."""
         return self.stok_miktari <= self.kritik_esik
 
     @property
+    def fiyat_kurus(self) -> int:
+        """Birim fiyatın kuruş cinsinden tam değeri (veritabanında böyle saklanır)."""
+        return kurusa_cevir(self.fiyat)
+
+    @property
     def toplam_deger(self) -> float:
-        """Ürünün toplam stok değeri (fiyat × miktar)."""
-        return self.fiyat * self.stok_miktari
+        """Ürünün toplam stok değeri (fiyat × miktar), kuruş hassasiyetinde."""
+        return self.fiyat_kurus * self.stok_miktari / 100
 
 
 @dataclass

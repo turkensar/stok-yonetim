@@ -1,0 +1,16 @@
+# Sabitlenmiş bağımlılıklar için haftalık güncelleme PR'ları açar;
+# her PR CI'daki testlerden geçmek zorundadır.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      # pandas 3.x Python 3.11+ gerektiriyor; README Python 3.10+ destekliyor.
+      - dependency-name: pandas
+        versions: [">=3"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

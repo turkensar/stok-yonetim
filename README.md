@@ -3,9 +3,9 @@
 > Küçük ve orta ölçekli işletmelerin ürün envanterini, stok giriş-çıkışlarını ve kritik stok durumlarını takip edebileceği; Python OOP mimarisinde geliştirilmiş, SQLite destekli ve Streamlit tabanlı bir yönetim uygulaması.
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.35%2B-FF4B4B?logo=streamlit&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.64-FF4B4B?logo=streamlit&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-3-lightgrey?logo=sqlite&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ---
 
@@ -25,14 +25,16 @@
 | **🏷️ Kategoriler** | Ekleme, silme, ürün sayısı gösterimi |
 | **📦 Ürünler** | Ekleme, güncelleme, silme (onay adımlı), arama, filtreleme |
 | **📋 Hareketler** | Stok giriş/çıkış, 5 boyutlu filtreleme, renk kodlu tür gösterimi |
-| **⚠️ Kritik Stok** | Eksik adet, tedarik maliyeti, stok tükenme uyarısı |
+| **⚠️ Kritik Stok** | Kritik seviyeden çıkmak için gereken adet, tedarik maliyeti, stok tükenme uyarısı |
 | **📈 Raporlama** | 4 farklı CSV dışa aktarma, demo veri yükleme |
 
 ### İş Kuralları
 - Stok çıkışı mevcut stoku aşamaz
 - Fiyat, stok ve kritik eşik negatif olamaz
 - Aynı isimli ürün tekrar eklenemez
-- Ürün silme işlemi onay adımı gerektirir
+- Ürün silme işlemi onay adımı gerektirir; silinen ürün pasife alınır, hareket geçmişi korunur
+- Stok yalnızca giriş/çıkış hareketleriyle değişir; yeni ürünün başlangıç stoğu da hareket olarak kaydedilir
+- Stok güncellemesi ve hareket kaydı tek transaction içinde yapılır (eşzamanlı işlemlerde stok negatife düşmez)
 - Kategoriye bağlı ürünler varken kategori silinemez
 - Stok çıkışı kritik eşiği geçerse kullanıcı uyarılır
 
@@ -58,7 +60,10 @@ stok_yonetim/
 ├── models.py        # OOP veri modelleri: Kategori, Urun, StokHareketi
 ├── database.py      # SQLite CRUD ve sorgu fonksiyonları
 ├── services.py      # İş kuralları ve doğrulama (StokServisi sınıfı)
+├── tests/           # pytest testleri (servis, migration, arayüz duman testleri)
 ├── requirements.txt
+├── requirements-dev.txt
+├── LICENSE
 ├── README.md
 └── data/
     └── stok.db      # SQLite veritabanı (ilk çalıştırmada otomatik oluşur)
@@ -99,6 +104,15 @@ streamlit run app.py
 ```
 
 Tarayıcıda `http://localhost:8501` otomatik açılır.
+
+### Testler
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+Veritabanı şeması `PRAGMA user_version` ile sürümlenir; eski bir `stok.db` ilk açılışta verisi korunarak otomatik olarak güncellenir.
 
 ---
 
