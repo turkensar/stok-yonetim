@@ -10,16 +10,12 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.10", "3.12"]
-        include:
-          # 3.10 işi desteklenen en düşük Streamlit sürümüyle, 3.12 işi en yenisiyle çalışır
-          - python-version: "3.10"
-            streamlit: "streamlit==1.49.*"
-    name: Python ${{ matrix.python-version }} ${{ matrix.streamlit }}
+    name: Python ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - run: pip install -r requirements-dev.txt ${{ matrix.streamlit }}
+      - run: pip install -r requirements-dev.txt
       - run: pytest -q
