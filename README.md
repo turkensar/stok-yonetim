@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.49%2B-FF4B4B?logo=streamlit&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-3-lightgrey?logo=sqlite&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ---
 
@@ -63,6 +63,7 @@ stok_yonetim/
 ├── tests/           # pytest testleri (servis, migration, arayüz duman testleri)
 ├── requirements.txt
 ├── requirements-dev.txt
+├── LICENSE
 ├── README.md
 └── data/
     └── stok.db      # SQLite veritabanı (ilk çalıştırmada otomatik oluşur)
