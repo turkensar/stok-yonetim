@@ -7,7 +7,6 @@ import html
 import pandas as pd
 import streamlit as st
 
-import database as db
 from models import tr_kucuk
 from services import StokServisi
 
@@ -15,7 +14,7 @@ from services import StokServisi
 # Başlangıç
 # ─────────────────────────────────────────────────────────────────────────────
 
-db.init_db()
+StokServisi.veritabani_hazirla()
 servis = StokServisi()
 
 st.set_page_config(
@@ -173,7 +172,7 @@ if sayfa == "📊 Dashboard":
     # ── Sağ Panel ─────────────────────────────────────────────────────────────
     with col_yan:
         # Kategori dağılımı
-        dagilim = db.kategori_dagilimi()
+        dagilim = servis.kategori_dagilimi()
         if dagilim:
             st.markdown("#### 🏷️ Kategori Bazlı Dağılım")
             df_d = pd.DataFrame(dagilim)
@@ -208,7 +207,7 @@ elif sayfa == "🏷️ Kategoriler":
 
     st.divider()
     st.markdown("#### Mevcut Kategoriler")
-    kategoriler = db.kategorileri_urun_sayisiyla_getir()
+    kategoriler = servis.kategorileri_urun_sayisiyla_getir()
 
     if kategoriler:
         # Tablo başlığı
@@ -306,7 +305,7 @@ elif sayfa == "📦 Ürünler":
                 list(urun_map.keys()),
                 format_func=lambda x: urun_map[x],
             )
-            urun = db.urun_getir(secili_id)
+            urun = servis.urun_getir(secili_id)
 
             if urun:
                 with st.form("urun_guncelle_form"):
@@ -373,7 +372,7 @@ elif sayfa == "📋 Hareketler":
             # Ürün seçimi formun dışında: seçim değişince stok bilgisi hemen güncellenir.
             uid   = st.selectbox("Ürün", list(urun_map.keys()),
                                  format_func=lambda x: urun_map[x], key="giris_urun")
-            bilgi = db.urun_getir(uid)
+            bilgi = servis.urun_getir(uid)
             if bilgi:
                 st.caption(f"Mevcut stok: **{sayi_formatla(bilgi['stok_miktari'])} adet**")
             with st.form("giris_form", clear_on_submit=True):
@@ -389,7 +388,7 @@ elif sayfa == "📋 Hareketler":
         else:
             uid   = st.selectbox("Ürün", list(urun_map.keys()),
                                  format_func=lambda x: urun_map[x], key="cikis_urun")
-            bilgi = db.urun_getir(uid)
+            bilgi = servis.urun_getir(uid)
             if bilgi:
                 st.caption(
                     f"Mevcut stok: **{sayi_formatla(bilgi['stok_miktari'])} adet**  ·  "

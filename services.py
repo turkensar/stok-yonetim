@@ -19,6 +19,11 @@ Sonuc = tuple[bool, str]
 class StokServisi:
     """Tüm stok yönetimi iş kurallarını içeren servis sınıfı."""
 
+    @staticmethod
+    def veritabani_hazirla() -> None:
+        """Tabloları oluşturur ve bekleyen şema migration'larını uygular."""
+        db.init_db()
+
     # ── Kategori İşlemleri ────────────────────────────────────────────────────
 
     def kategori_ekle(self, ad: str, aciklama: str = "") -> Sonuc:
@@ -38,9 +43,9 @@ class StokServisi:
 
     def kategori_sil(self, kategori_id: int) -> Sonuc:
         # Kategoriye bağlı ürün varsa silme
-        urunler = db.urunleri_getir(kategori_id=kategori_id)
-        if urunler:
-            return False, f"Bu kategoriye bağlı {len(urunler)} ürün var. Önce ürünleri silin veya taşıyın."
+        urun_sayisi = db.kategori_urun_sayisi(kategori_id)
+        if urun_sayisi:
+            return False, f"Bu kategoriye bağlı {urun_sayisi} ürün var. Önce ürünleri silin veya taşıyın."
         try:
             db.kategori_sil(kategori_id)
             return True, "Kategori silindi."
@@ -49,6 +54,12 @@ class StokServisi:
 
     def kategorileri_getir(self) -> list[dict]:
         return db.kategorileri_getir()
+
+    def kategorileri_urun_sayisiyla_getir(self) -> list[dict]:
+        return db.kategorileri_urun_sayisiyla_getir()
+
+    def kategori_dagilimi(self) -> list[dict]:
+        return db.kategori_dagilimi()
 
     # ── Ürün İşlemleri ────────────────────────────────────────────────────────
 
@@ -135,6 +146,9 @@ class StokServisi:
 
     def urunleri_getir(self, kategori_id: Optional[int] = None) -> list[dict]:
         return db.urunleri_getir(kategori_id)
+
+    def urun_getir(self, urun_id: int) -> Optional[dict]:
+        return db.urun_getir(urun_id)
 
     # ── Stok Hareketleri ─────────────────────────────────────────────────────
 

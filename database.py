@@ -265,6 +265,15 @@ def kategori_getir(kategori_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def kategori_urun_sayisi(kategori_id: int) -> int:
+    """Kategoriye bağlı aktif ürün sayısı."""
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) FROM urunler WHERE kategori_id = ? AND aktif = 1",
+            (kategori_id,),
+        ).fetchone()[0]
+
+
 def kategori_sil(kategori_id: int) -> None:
     with get_connection() as conn:
         # Pasif (silinmiş) ürünlerin kategori bağı koparılır; geçmişleri kalır.
