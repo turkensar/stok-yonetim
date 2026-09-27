@@ -14,7 +14,7 @@ CREATE TABLE stok_hareketleri (id INTEGER PRIMARY KEY AUTOINCREMENT, urun_id INT
                                aciklama TEXT DEFAULT '', islem_sonrasi_stok INTEGER NOT NULL,
                                FOREIGN KEY (urun_id) REFERENCES urunler(id));
 INSERT INTO kategoriler (ad) VALUES ('Eski');
-INSERT INTO urunler (ad, kategori_id, fiyat, stok_miktari, kritik_esik) VALUES ('Vida', 1, 2, 5, 1);
+INSERT INTO urunler (ad, kategori_id, fiyat, stok_miktari, kritik_esik) VALUES ('Vida', 1, 1.005, 5, 1);
 INSERT INTO stok_hareketleri (urun_id, tur, miktar, tarih, islem_sonrasi_stok)
        VALUES (1, 'giriş', 5, '2026-01-01 10:00:00', 5);
 """
@@ -31,7 +31,11 @@ def test_eski_veritabani_veri_kaybetmeden_tasinir(db_yolu):
         assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SEMA_SURUMU
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
         sema = conn.execute("SELECT sql FROM sqlite_master WHERE name='urunler'").fetchone()[0]
-        assert "CHECK" in sema and "aktif" in sema
+        assert "CHECK" in sema and "aktif" in sema and "fiyat_kurus" in sema
+        # Yabancı anahtar yeniden kurulan 'urunler' tablosunu göstermeye devam etmeli
+        fk = conn.execute("PRAGMA foreign_key_list(stok_hareketleri)").fetchall()
+        assert [r[2] for r in fk] == ["urunler"]
+        assert conn.execute("SELECT fiyat_kurus FROM urunler").fetchone()[0] == 101
 
     urun = db.urun_getir(1)
     assert (urun["ad"], urun["stok_miktari"], urun["kategori_adi"]) == ("Vida", 5, "Eski")

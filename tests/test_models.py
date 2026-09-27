@@ -45,3 +45,17 @@ def test_gecersiz_hareket_reddedilir(tur, miktar):
 def test_tr_kucuk(metin, beklenen):
     from models import tr_kucuk
     assert tr_kucuk(metin) == beklenen
+
+
+@pytest.mark.parametrize(
+    "tutar, kurus", [(1.005, 101), (0.1, 10), (19.99, 1999), (0, 0), (2.675, 268)]
+)
+def test_kurusa_cevir(tutar, kurus):
+    from models import kurusa_cevir
+    assert kurusa_cevir(tutar) == kurus
+
+
+@pytest.mark.parametrize("tutar", [float("nan"), float("inf")])
+def test_gecersiz_tutar_reddedilir(tutar):
+    with pytest.raises(ValueError):
+        Urun(ad="X", fiyat=tutar, stok_miktari=0, kritik_esik=0)

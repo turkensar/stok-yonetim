@@ -230,3 +230,18 @@ def test_son_7_gun_yerel_saate_gore_hesaplanir(servis, urun_id, utc_den_farkli_g
     veri = servis.dashboard_verileri()
     # Fixture'daki başlangıç stoku hareketi de bugün, son 7 güne dahil.
     assert veri["son7_giris"] == 2
+
+
+# ── Para hassasiyeti ─────────────────────────────────────────────────────────
+
+def test_toplam_deger_kurus_hassasiyetinde(servis, kategori_id):
+    for i in range(10):
+        servis.urun_ekle(f"Ürün {i}", 0.1, 3, 0, kategori_id)
+    assert servis.dashboard_verileri()["toplam_deger"] == 3.0
+    assert db.kategori_dagilimi()[0]["toplam_deger"] == 3.0
+    assert "0.30000000000000004" not in servis.tum_urunler_csv_aktar()
+
+
+def test_fiyat_kurusa_yuvarlanarak_saklanir(servis, kategori_id):
+    servis.urun_ekle("Vida", 1.005, 0, 0, kategori_id)
+    assert servis.urunleri_getir()[0]["fiyat"] == 1.01

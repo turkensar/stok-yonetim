@@ -242,7 +242,7 @@ class StokServisi:
         if not urunler:
             return ""
         df = pd.DataFrame(urunler)[["ad", "kategori_adi", "fiyat", "stok_miktari", "kritik_esik"]]
-        df["toplam_deger"] = df["fiyat"] * df["stok_miktari"]
+        df["toplam_deger"] = (df["fiyat"] * df["stok_miktari"]).round(2)
         df.columns = ["Ürün Adı", "Kategori", "Birim Fiyat (₺)", "Stok", "Kritik Eşik", "Toplam Değer (₺)"]
         return self._df_to_csv(df)
 

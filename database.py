@@ -9,12 +9,12 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Iterator, Optional
 
-from models import Kategori, Urun, StokHareketi, tr_kucuk
+from models import Kategori, Urun, StokHareketi, kurusa_cevir, tr_kucuk
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "stok.db")
 
 # Şema her değiştiğinde artırılır; init_db eksik migration'ları sırayla uygular.
-SEMA_SURUMU = 2
+SEMA_SURUMU = 3
 
 
 class YetersizStokHatasi(Exception):
@@ -160,7 +160,44 @@ def _migration_2(conn: sqlite3.Connection) -> None:
     )
 
 
-_MIGRATIONLAR = {1: _migration_1, 2: _migration_2}
+def _migration_3(conn: sqlite3.Connection) -> None:
+    """
+    Fiyat, kayan nokta (REAL) yerine kuruş cinsinden tamsayı olarak saklanır.
+    SQLite sütun tipi değiştiremediği için tablo yeniden kurulur. Önerilen sıra
+    izlenir (yeni tablo → kopyala → eskiyi sil → yeniden adlandır); böylece
+    stok_hareketleri'nin yabancı anahtarı 'urunler' adını göstermeye devam eder.
+    """
+    conn.execute("""
+        CREATE TABLE urunler_yeni (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            ad            TEXT    NOT NULL,
+            kategori_id   INTEGER,
+            fiyat_kurus   INTEGER NOT NULL DEFAULT 0 CHECK (fiyat_kurus >= 0),
+            stok_miktari  INTEGER NOT NULL DEFAULT 0 CHECK (stok_miktari >= 0),
+            kritik_esik   INTEGER NOT NULL DEFAULT 5 CHECK (kritik_esik >= 0),
+            aktif         INTEGER NOT NULL DEFAULT 1 CHECK (aktif IN (0, 1)),
+            FOREIGN KEY (kategori_id) REFERENCES kategoriler(id)
+        )
+    """)
+    conn.create_function("KURUS", 1, kurusa_cevir, deterministic=True)
+    conn.execute(
+        """INSERT INTO urunler_yeni
+           (id, ad, kategori_id, fiyat_kurus, stok_miktari, kritik_esik, aktif)
+           SELECT id, ad, kategori_id, KURUS(fiyat),
+                  stok_miktari, kritik_esik, aktif
+           FROM urunler"""
+    )
+    conn.execute("DROP TABLE urunler")
+    conn.execute("ALTER TABLE urunler_yeni RENAME TO urunler")
+
+
+_MIGRATIONLAR = {1: _migration_1, 2: _migration_2, 3: _migration_3}
+
+# Ürün sorgularında dönen sütunlar; fiyat arayüz için TL'ye çevrilir.
+_URUN_SUTUNLARI = (
+    "u.id, u.ad, u.kategori_id, u.fiyat_kurus / 100.0 AS fiyat, "
+    "u.stok_miktari, u.kritik_esik, u.aktif"
+)
 
 
 def init_db() -> None:
@@ -245,9 +282,9 @@ def kategori_sil(kategori_id: int) -> None:
 def urun_ekle(u: Urun, conn: Optional[sqlite3.Connection] = None) -> int:
     with _baglanti(conn) as conn:
         cur = conn.execute(
-            """INSERT INTO urunler (ad, kategori_id, fiyat, stok_miktari, kritik_esik)
+            """INSERT INTO urunler (ad, kategori_id, fiyat_kurus, stok_miktari, kritik_esik)
                VALUES (?, ?, ?, ?, ?)""",
-            (u.ad, u.kategori_id, u.fiyat, u.stok_miktari, u.kritik_esik),
+            (u.ad, u.kategori_id, u.fiyat_kurus, u.stok_miktari, u.kritik_esik),
         )
         return cur.lastrowid
 
@@ -256,7 +293,7 @@ def urunleri_getir(kategori_id: Optional[int] = None) -> list[dict]:
     with get_connection() as conn:
         if kategori_id:
             rows = conn.execute(
-                """SELECT u.*, k.ad AS kategori_adi
+                f"""SELECT {_URUN_SUTUNLARI}, k.ad AS kategori_adi
                    FROM urunler u
                    LEFT JOIN kategoriler k ON u.kategori_id = k.id
                    WHERE u.aktif = 1 AND u.kategori_id = ?
@@ -265,7 +302,7 @@ def urunleri_getir(kategori_id: Optional[int] = None) -> list[dict]:
             ).fetchall()
         else:
             rows = conn.execute(
-                """SELECT u.*, k.ad AS kategori_adi
+                f"""SELECT {_URUN_SUTUNLARI}, k.ad AS kategori_adi
                    FROM urunler u
                    LEFT JOIN kategoriler k ON u.kategori_id = k.id
                    WHERE u.aktif = 1
@@ -277,7 +314,7 @@ def urunleri_getir(kategori_id: Optional[int] = None) -> list[dict]:
 def urun_getir(urun_id: int) -> Optional[dict]:
     with get_connection() as conn:
         row = conn.execute(
-            """SELECT u.*, k.ad AS kategori_adi
+            f"""SELECT {_URUN_SUTUNLARI}, k.ad AS kategori_adi
                FROM urunler u
                LEFT JOIN kategoriler k ON u.kategori_id = k.id
                WHERE u.id = ? AND u.aktif = 1""",
@@ -291,9 +328,9 @@ def urun_guncelle(u: Urun) -> None:
     with get_connection() as conn:
         conn.execute(
             """UPDATE urunler
-               SET ad=?, kategori_id=?, fiyat=?, kritik_esik=?
+               SET ad=?, kategori_id=?, fiyat_kurus=?, kritik_esik=?
                WHERE id=? AND aktif=1""",
-            (u.ad, u.kategori_id, u.fiyat, u.kritik_esik, u.id),
+            (u.ad, u.kategori_id, u.fiyat_kurus, u.kritik_esik, u.id),
         )
 
 
@@ -462,8 +499,8 @@ def en_yuksek_degerli_urun() -> Optional[dict]:
     """Toplam stok değeri (fiyat × stok) en yüksek ürünü döner."""
     with get_connection() as conn:
         row = conn.execute(
-            """SELECT ad, fiyat, stok_miktari,
-                      (fiyat * stok_miktari) AS toplam_deger
+            """SELECT ad, fiyat_kurus / 100.0 AS fiyat, stok_miktari,
+                      (fiyat_kurus * stok_miktari) / 100.0 AS toplam_deger
                FROM urunler
                WHERE aktif = 1
                ORDER BY toplam_deger DESC LIMIT 1"""
@@ -477,7 +514,7 @@ def kategori_dagilimi() -> list[dict]:
         rows = conn.execute(
             """SELECT k.ad AS kategori,
                       COUNT(u.id) AS urun_sayisi,
-                      COALESCE(SUM(u.fiyat * u.stok_miktari), 0) AS toplam_deger
+                      COALESCE(SUM(u.fiyat_kurus * u.stok_miktari), 0) / 100.0 AS toplam_deger
                FROM kategoriler k
                LEFT JOIN urunler u ON u.kategori_id = k.id AND u.aktif = 1
                GROUP BY k.id
@@ -503,7 +540,7 @@ def dashboard_verisi_getir() -> dict:
             "SELECT SUM(stok_miktari) FROM urunler WHERE aktif = 1"
         ).fetchone()[0] or 0
         toplam_deger = conn.execute(
-            "SELECT SUM(fiyat * stok_miktari) FROM urunler WHERE aktif = 1"
+            "SELECT SUM(fiyat_kurus * stok_miktari) / 100.0 FROM urunler WHERE aktif = 1"
         ).fetchone()[0] or 0.0
         kritik_sayi = conn.execute(
             "SELECT COUNT(*) FROM urunler WHERE aktif = 1 AND stok_miktari <= kritik_esik"
