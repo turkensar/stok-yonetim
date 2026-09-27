@@ -6,6 +6,7 @@ Veritabanı katmanı — SQLite bağlantısı ve CRUD fonksiyonları.
 import os
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 from typing import Iterator, Optional
 
 from models import Kategori, Urun, StokHareketi, tr_kucuk
@@ -485,6 +486,14 @@ def kategori_dagilimi() -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def _gun_oncesi(gun: int) -> str:
+    """
+    Hareket tarihleri yerel saatle yazıldığı için kesim tarihi de yerel saatle
+    hesaplanır (SQLite'ın date('now') değeri UTC'dir).
+    """
+    return (datetime.now() - timedelta(days=gun)).strftime("%Y-%m-%d")
+
+
 def dashboard_verisi_getir() -> dict:
     with get_connection() as conn:
         toplam_urun = conn.execute(
@@ -508,17 +517,19 @@ def dashboard_verisi_getir() -> dict:
             """SELECT u.ad, COUNT(sh.id) AS hareket_sayisi
                FROM stok_hareketleri sh
                JOIN urunler u ON sh.urun_id = u.id
-               WHERE u.aktif = 1 AND sh.tarih >= date('now', '-30 days')
+               WHERE u.aktif = 1 AND sh.tarih >= ?
                GROUP BY sh.urun_id
-               ORDER BY hareket_sayisi DESC LIMIT 1"""
+               ORDER BY hareket_sayisi DESC LIMIT 1""",
+            (_gun_oncesi(30),),
         ).fetchone()
 
         # Son 7 günde giriş/çıkış sayısı
         son7 = conn.execute(
             """SELECT tur, COUNT(*) AS sayi
                FROM stok_hareketleri
-               WHERE tarih >= date('now', '-7 days')
-               GROUP BY tur"""
+               WHERE tarih >= ?
+               GROUP BY tur""",
+            (_gun_oncesi(7),),
         ).fetchall()
 
         # Stoku tamamen biten ürün sayısı

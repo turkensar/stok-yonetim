@@ -196,3 +196,37 @@ def test_dashboard_analizi(servis):
     assert veri["toplam_urun"] == 8 and veri["kritik_sayi"] == 2
     metinler = " ".join(m for _, m in servis.dashboard_analiz_yorumu(veri))
     assert "kritik stok" in metinler
+
+
+# ── Saat dilimi ──────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def utc_den_farkli_gunde_saat_dilimi(monkeypatch):
+    """Yerel tarihin UTC tarihinden farklı olduğu bir saat dilimine geçer."""
+    import time
+    from datetime import datetime, timezone
+
+    if not hasattr(time, "tzset"):
+        pytest.skip("time.tzset bu platformda yok")
+    utc_gunu = datetime.now(timezone.utc).date()
+    for tz in ("Etc/GMT-14", "Etc/GMT+12"):  # UTC+14 ve UTC−12
+        monkeypatch.setenv("TZ", tz)
+        time.tzset()
+        if datetime.now().date() != utc_gunu:
+            break
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+def test_son_7_gun_yerel_saate_gore_hesaplanir(servis, urun_id, utc_den_farkli_gunde_saat_dilimi):
+    from datetime import date, timedelta
+
+    bugun = date.today()
+    for gun in (7, 8):  # 7 gün önce: dahil, 8 gün önce: hariç
+        tarih = f"{bugun - timedelta(days=gun)} 12:00:00"
+        db.stok_hareketi_uygula(urun_id, "giriş", 1, tarih=tarih)
+
+    veri = servis.dashboard_verileri()
+    # Fixture'daki başlangıç stoku hareketi de bugün, son 7 güne dahil.
+    assert veri["son7_giris"] == 2
