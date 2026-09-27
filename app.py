@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 import database as db
+from models import tr_kucuk
 from services import StokServisi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -254,7 +255,7 @@ elif sayfa == "📦 Ürünler":
 
         urunler = servis.urunleri_getir(kategori_id=filtre_kat if filtre_kat else None)
         if arama:
-            urunler = [u for u in urunler if arama.lower() in u["ad"].lower()]
+            urunler = [u for u in urunler if tr_kucuk(arama) in tr_kucuk(u["ad"])]
 
         if urunler:
             df = pd.DataFrame(urunler)

@@ -1,3 +1,4 @@
+import pytest
 import sqlite3
 import threading
 
@@ -10,6 +11,12 @@ def test_kategori_ekle_ve_tekrar_reddi(servis):
     assert servis.kategori_ekle("Gıda")[0]
     basari, mesaj = servis.kategori_ekle("Gıda")
     assert not basari and "zaten mevcut" in mesaj
+
+
+def test_kategori_tekrari_turkce_harf_duyarsiz(servis):
+    assert servis.kategori_ekle("İçecek")[0]
+    assert not servis.kategori_ekle("içecek")[0]
+    assert servis.kategori_ekle("Icecek")[0]  # 'I' → 'ı', farklı bir ad
 
 
 def test_bos_kategori_adi_reddedilir(servis):
@@ -46,6 +53,12 @@ def test_ayni_isimli_urun_eklenemez(servis, kategori_id, urun_id):
     basari, _ = servis.urun_ekle("  kalem ", 1.0, 1, 1, kategori_id)
     assert not basari
     assert len(servis.urunleri_getir()) == 1
+
+
+@pytest.mark.parametrize("ilk, ikinci", [("IŞIK", "ışık"), ("İpek İp", "ipek ip")])
+def test_urun_tekrari_turkce_harf_duyarsiz(servis, kategori_id, ilk, ikinci):
+    assert servis.urun_ekle(ilk, 1.0, 0, 0, kategori_id)[0]
+    assert not servis.urun_ekle(ikinci, 1.0, 0, 0, kategori_id)[0]
 
 
 def test_gecersiz_urun_hicbir_sey_yazmaz(servis, kategori_id):

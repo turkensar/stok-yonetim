@@ -36,3 +36,12 @@ def test_bos_kategori_reddedilir():
 def test_gecersiz_hareket_reddedilir(tur, miktar):
     with pytest.raises(ValueError):
         StokHareketi(urun_id=1, tur=tur, miktar=miktar, islem_sonrasi_stok=0)
+
+
+@pytest.mark.parametrize(
+    "metin, beklenen",
+    [("IŞIK", "ışık"), ("İzmir", "izmir"), ("ISPARTA", "ısparta"), ("Çiğ Köfte", "çiğ köfte")],
+)
+def test_tr_kucuk(metin, beklenen):
+    from models import tr_kucuk
+    assert tr_kucuk(metin) == beklenen

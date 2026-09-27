@@ -8,6 +8,14 @@ from datetime import datetime
 from typing import Optional
 
 
+def tr_kucuk(metin: str) -> str:
+    """
+    Türkçe kurallarıyla küçük harfe çevirir: 'I' → 'ı', 'İ' → 'i'.
+    str.lower() ve SQLite LOWER() bu harfleri doğru dönüştürmez.
+    """
+    return metin.replace("I", "ı").replace("İ", "i").lower()
+
+
 @dataclass
 class Kategori:
     ad: str

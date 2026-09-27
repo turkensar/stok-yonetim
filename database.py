@@ -8,7 +8,7 @@ import sqlite3
 from contextlib import contextmanager
 from typing import Iterator, Optional
 
-from models import Kategori, Urun, StokHareketi
+from models import Kategori, Urun, StokHareketi, tr_kucuk
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "stok.db")
 
@@ -34,6 +34,8 @@ def _baglan() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # SQLite'ın LOWER() fonksiyonu yalnızca ASCII harfleri dönüştürür.
+    conn.create_function("TR_LOWER", 1, tr_kucuk, deterministic=True)
     return conn
 
 
@@ -206,6 +208,15 @@ def kategori_adla_getir(
     with _baglanti(conn) as conn:
         row = conn.execute("SELECT * FROM kategoriler WHERE ad = ?", (ad,)).fetchone()
     return dict(row) if row else None
+
+
+def kategori_adi_var_mi(ad: str) -> bool:
+    """Aynı isimde (Türkçe büyük/küçük harf duyarsız) kategori var mı kontrol eder."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id FROM kategoriler WHERE TR_LOWER(ad) = TR_LOWER(?)", (ad,)
+        ).fetchone()
+    return row is not None
 
 
 def kategori_getir(kategori_id: int) -> Optional[dict]:
@@ -423,12 +434,12 @@ def urun_adi_var_mi(
     with _baglanti(conn) as conn:
         if exclude_id:
             row = conn.execute(
-                "SELECT id FROM urunler WHERE aktif = 1 AND LOWER(ad) = LOWER(?) AND id != ?",
+                "SELECT id FROM urunler WHERE aktif = 1 AND TR_LOWER(ad) = TR_LOWER(?) AND id != ?",
                 (ad, exclude_id),
             ).fetchone()
         else:
             row = conn.execute(
-                "SELECT id FROM urunler WHERE aktif = 1 AND LOWER(ad) = LOWER(?)", (ad,)
+                "SELECT id FROM urunler WHERE aktif = 1 AND TR_LOWER(ad) = TR_LOWER(?)", (ad,)
             ).fetchone()
     return row is not None
 

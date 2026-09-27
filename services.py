@@ -25,6 +25,8 @@ class StokServisi:
         ad = ad.strip()
         if not ad:
             return False, "Kategori adı boş olamaz."
+        if db.kategori_adi_var_mi(ad):
+            return False, f"'{ad}' adında bir kategori zaten mevcut."
         try:
             k = Kategori(ad=ad, aciklama=aciklama)
             db.kategori_ekle(k)
