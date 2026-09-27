@@ -32,7 +32,9 @@
 - Stok çıkışı mevcut stoku aşamaz
 - Fiyat, stok ve kritik eşik negatif olamaz
 - Aynı isimli ürün tekrar eklenemez
-- Ürün silme işlemi onay adımı gerektirir
+- Ürün silme işlemi onay adımı gerektirir; silinen ürün pasife alınır, hareket geçmişi korunur
+- Stok yalnızca giriş/çıkış hareketleriyle değişir; yeni ürünün başlangıç stoğu da hareket olarak kaydedilir
+- Stok güncellemesi ve hareket kaydı tek transaction içinde yapılır (eşzamanlı işlemlerde stok negatife düşmez)
 - Kategoriye bağlı ürünler varken kategori silinemez
 - Stok çıkışı kritik eşiği geçerse kullanıcı uyarılır
 
@@ -58,7 +60,9 @@ stok_yonetim/
 ├── models.py        # OOP veri modelleri: Kategori, Urun, StokHareketi
 ├── database.py      # SQLite CRUD ve sorgu fonksiyonları
 ├── services.py      # İş kuralları ve doğrulama (StokServisi sınıfı)
+├── tests/           # pytest testleri (servis, migration, arayüz duman testleri)
 ├── requirements.txt
+├── requirements-dev.txt
 ├── README.md
 └── data/
     └── stok.db      # SQLite veritabanı (ilk çalıştırmada otomatik oluşur)
@@ -99,6 +103,15 @@ streamlit run app.py
 ```
 
 Tarayıcıda `http://localhost:8501` otomatik açılır.
+
+### Testler
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+Veritabanı şeması `PRAGMA user_version` ile sürümlenir; eski bir `stok.db` ilk açılışta verisi korunarak otomatik olarak güncellenir.
 
 ---
 

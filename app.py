@@ -68,7 +68,19 @@ def sayi_formatla(deger: int) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _bildir(basari: bool, mesaj: str) -> None:
-    st.success(mesaj) if basari else st.error(mesaj)
+    """
+    Hata mesajını hemen gösterir. Başarıda mesajı saklayıp sayfayı yeniler;
+    böylece mesaj st.rerun() ile kaybolmaz, yenilenen sayfada gösterilir.
+    """
+    if not basari:
+        st.error(mesaj)
+        return
+    st.session_state["_bildirim"] = mesaj
+    st.rerun()
+
+
+if _bekleyen := st.session_state.pop("_bildirim", None):
+    st.toast(_bekleyen, icon="✅")
 
 
 def _urun_secenekleri() -> dict[int, str]:
@@ -192,8 +204,6 @@ elif sayfa == "🏷️ Kategoriler":
             if st.form_submit_button("Ekle", use_container_width=True, type="primary"):
                 basari, mesaj = servis.kategori_ekle(ad, aciklama)
                 _bildir(basari, mesaj)
-                if basari:
-                    st.rerun()
 
     st.divider()
     st.markdown("#### Mevcut Kategoriler")
@@ -216,8 +226,6 @@ elif sayfa == "🏷️ Kategoriler":
             if c4.button("🗑️", key=f"ksil_{k['id']}", help="Kategoriyi sil"):
                 basari, mesaj = servis.kategori_sil(k["id"])
                 _bildir(basari, mesaj)
-                if basari:
-                    st.rerun()
     else:
         st.info("Henüz kategori eklenmedi.")
 
@@ -285,8 +293,6 @@ elif sayfa == "📦 Ürünler":
                         ad, float(fiyat), int(stok_miktari), int(kritik_esik), int(kat_id)
                     )
                     _bildir(basari, mesaj)
-                    if basari:
-                        st.rerun()
 
     # ── Düzenle / Sil ─────────────────────────────────────────────────────────
     with tab_duzenle:
@@ -327,8 +333,6 @@ elif sayfa == "📦 Ürünler":
                             secili_id, ad, float(fiyat), int(kritik_esik), int(kat_secim),
                         )
                         _bildir(basari, mesaj)
-                        if basari:
-                            st.rerun()
 
                     if sil_btn:
                         st.session_state["sil_onayi_id"] = secili_id
@@ -342,10 +346,8 @@ elif sayfa == "📦 Ürünler":
                 col_evet, col_vazgec = st.columns(2)
                 if col_evet.button("✅ Evet, Sil", type="primary", use_container_width=True):
                     basari, mesaj = servis.urun_sil(secili_id)
-                    _bildir(basari, mesaj)
                     st.session_state.pop("sil_onayi_id", None)
-                    if basari:
-                        st.rerun()
+                    _bildir(basari, mesaj)
                 if col_vazgec.button("❌ Vazgeç", use_container_width=True):
                     st.session_state.pop("sil_onayi_id", None)
                     st.rerun()
@@ -367,40 +369,37 @@ elif sayfa == "📋 Hareketler":
         if not urun_map:
             st.info("Henüz ürün yok.")
         else:
+            # Ürün seçimi formun dışında: seçim değişince stok bilgisi hemen güncellenir.
+            uid   = st.selectbox("Ürün", list(urun_map.keys()),
+                                 format_func=lambda x: urun_map[x], key="giris_urun")
+            bilgi = db.urun_getir(uid)
+            if bilgi:
+                st.caption(f"Mevcut stok: **{sayi_formatla(bilgi['stok_miktari'])} adet**")
             with st.form("giris_form", clear_on_submit=True):
-                uid      = st.selectbox("Ürün", list(urun_map.keys()),
-                                        format_func=lambda x: urun_map[x])
                 miktar   = st.number_input("Giriş Miktarı (adet)", min_value=1, step=1)
                 aciklama = st.text_input("Açıklama", placeholder="Tedarikçi adı, sipariş no...")
-                bilgi    = db.urun_getir(uid)
-                if bilgi:
-                    st.caption(f"Mevcut stok: **{sayi_formatla(bilgi['stok_miktari'])} adet**")
                 if st.form_submit_button("Giriş Yap", use_container_width=True, type="primary"):
                     basari, mesaj = servis.stok_girisi_yap(uid, int(miktar), aciklama)
                     _bildir(basari, mesaj)
-                    if basari:
-                        st.rerun()
 
     with tab_cikis:
         if not urun_map:
             st.info("Henüz ürün yok.")
         else:
+            uid   = st.selectbox("Ürün", list(urun_map.keys()),
+                                 format_func=lambda x: urun_map[x], key="cikis_urun")
+            bilgi = db.urun_getir(uid)
+            if bilgi:
+                st.caption(
+                    f"Mevcut stok: **{sayi_formatla(bilgi['stok_miktari'])} adet**  ·  "
+                    f"Kritik eşik: **{bilgi['kritik_esik']} adet**"
+                )
             with st.form("cikis_form", clear_on_submit=True):
-                uid      = st.selectbox("Ürün", list(urun_map.keys()),
-                                        format_func=lambda x: urun_map[x])
                 miktar   = st.number_input("Çıkış Miktarı (adet)", min_value=1, step=1)
                 aciklama = st.text_input("Açıklama", placeholder="Satış, fire, iade...")
-                bilgi    = db.urun_getir(uid)
-                if bilgi:
-                    st.caption(
-                        f"Mevcut stok: **{sayi_formatla(bilgi['stok_miktari'])} adet**  ·  "
-                        f"Kritik eşik: **{bilgi['kritik_esik']} adet**"
-                    )
                 if st.form_submit_button("Çıkış Yap", use_container_width=True, type="primary"):
                     basari, mesaj = servis.stok_cikisi_yap(uid, int(miktar), aciklama)
                     _bildir(basari, mesaj)
-                    if basari:
-                        st.rerun()
 
     with tab_gecmis:
         st.markdown("#### Filtreler")
@@ -581,5 +580,3 @@ elif sayfa == "📈 Raporlama":
         if st.button("🧪 Demo Verisi Yükle", type="primary", use_container_width=True):
             basari, mesaj = servis.demo_veri_yukle()
             _bildir(basari, mesaj)
-            if basari:
-                st.rerun()
